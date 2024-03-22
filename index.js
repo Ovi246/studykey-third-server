@@ -1,12 +1,11 @@
 const express = require("express");
 const SellingPartnerAPI = require("amazon-sp-api");
 const AWS = require("aws-sdk");
-const fs = require("fs");
 const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
-const allowedOrigins = ["https://feedback-page-pi.vercel.app/"];
+const allowedOrigins = ["https://studykey-riddles.vercel.app"];
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -93,9 +92,6 @@ app.post("/validate-order-id", async (req, res) => {
 
       // Extract the ASINs from the order items
       const asins = orderItems.OrderItems.map((item) => item.ASIN);
-      console.log(asins);
-      // Save the form data and ASINs to a JSON file
-      fs.writeFileSync("formData.json", JSON.stringify({ ...formData, asins }));
 
       res.status(200).send({ valid: true, asins });
     } else {
