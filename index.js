@@ -6,7 +6,23 @@ const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://your-frontend-domain.com",
+];
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        var msg =
+          "The CORS policy for this site does not allow access from the specified Origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+  })
+);
 
 let sellingPartner = new SellingPartnerAPI({
   region: "na", // The region of the selling partner API endpoint (“eu”, “na” or “fe”)
@@ -100,5 +116,4 @@ app.get("/", async (req, res) => {
   res.status(200).send("api running");
 });
 
-const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
+module.exports = app;
