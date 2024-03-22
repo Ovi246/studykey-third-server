@@ -6,10 +6,7 @@ const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://your-frontend-domain.com",
-];
+const allowedOrigins = ["https://feedback-page-pi.vercel.app/"];
 app.use(
   cors({
     origin: function (origin, callback) {
