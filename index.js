@@ -1,11 +1,42 @@
 const express = require("express");
+const geoip = require("geoip-lite");
+const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 const SellingPartnerAPI = require("amazon-sp-api");
-const AWS = require("aws-sdk");
 const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
 const allowedOrigins = ["https://studykey-riddles.vercel.app"];
+const nodemailer = require("nodemailer");
+
+const createDOMPurify = require("dompurify");
+const { JSDOM } = require("jsdom");
+
+const window = new JSDOM("").window;
+const DOMPurify = createDOMPurify(window);
+
+// Create a transporter object using the default SMTP transport
+let transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER, // Your Gmail address
+    pass: process.env.GMAIL_PASS, // Your Gmail password or App Password
+  },
+});
+
+// Enable various security headers
+app.use(helmet());
+
+// Limit requests to 100 per hour per IP
+const limiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+
+// Apply rate limiter to all requests
+app.use(limiter);
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -28,22 +59,12 @@ let sellingPartner = new SellingPartnerAPI({
       SELLING_PARTNER_APP_CLIENT_ID: process.env.SELLING_PARTNER_APP_CLIENT_ID,
       SELLING_PARTNER_APP_CLIENT_SECRET:
         process.env.SELLING_PARTNER_APP_CLIENT_SECRET,
-      //   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-      //   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
-      //   AWS_SELLING_PARTNER_ROLE: process.env.AWS_SELLING_PARTNER_ROLE,
     },
   },
 });
 
-// AWS.config.update({ region: process.env.AWS_REGION }); // replace with your region
-// const ses = new AWS.SES({ apiVersion: "2010-12-01" });
-
 app.post("/validate-order-id", async (req, res) => {
-  const formData = req.body;
-
-  // Extract the order ID from the form data
-  const orderId = formData.orderId;
-
+  const { orderId } = req.body;
   try {
     const order = await sellingPartner.callAPI({
       operation: "getOrder",
@@ -53,34 +74,7 @@ app.post("/validate-order-id", async (req, res) => {
       },
     });
 
-    if (order) {
-      //   const params = {
-      //     Destination: {
-      //       ToAddresses: [formData.customerEmail], // customer's email
-      //     },
-      //     Message: {
-      //       Body: {
-      //         Text: {
-      //           Data: "Here is your Amazon gift card code: ABCD-EFGH-IJKL",
-      //         }, // replace with the actual gift card code
-      //       },
-      //       Subject: { Data: "Your Amazon Gift Card" },
-      //     },
-      //     Source: process.env.EMAIL, // replace with your email
-      //   };
-
-      //   ses.sendEmail(params, function (err, data) {
-      //     if (err) {
-      //       console.error(err, err.stack);
-      //       res
-      //         .status(500)
-      //         .send({ error: "An error occurred while sending the email" });
-      //     } else {
-      //       console.log("Message sent: %s", data.MessageId);
-      //       res.status(200).send({ valid: true });
-      //     }
-      //   });
-
+    if (Object.keys(order).length > 0) {
       // Get the order items
       const orderItems = await sellingPartner.callAPI({
         operation: "getOrderItems",
@@ -105,8 +99,56 @@ app.post("/validate-order-id", async (req, res) => {
   }
 });
 
+app.post("/submit-review", async (req, res) => {
+  const formData = req.body;
+
+  if (formData) {
+    let mailOptions = {
+      from: process.env.GMAIL_USER, // Sender address
+      to: "Studykeyinserts@gmail.com", // Admin's email
+      subject: "New Order Submission", // Subject line
+      html: DOMPurify.sanitize(`
+        <h1>New Order Submission</h1>
+        <p><strong>Product Name:</strong> ${formData.productName}</p>
+        <p><strong>Satisfaction:</strong> ${formData.satisfaction}</p>
+        <p><strong>Order ID:</strong> ${formData.orderId}</p>
+        <p><strong>Duration:</strong> ${formData.duration}</p>
+        <p><strong>First Name:</strong> ${formData.firstName}</p>
+        <p><strong>Last Name:</strong> ${formData.lastName}</p>
+        <p><strong>Email:</strong> ${formData.email}</p>
+        <p><strong>Address:</strong> ${formData.address}</p>
+        <p><strong>City:</strong> ${formData.city}</p>
+        <p><strong>ZIP Code:</strong> ${formData.zip}</p>
+        <p><strong>State:</strong> ${formData.state}</p>
+        <p><strong>Newsletter:</strong> ${formData.newsletter}</p>
+        <p><strong>Reviews:</strong> ${formData.reviews}</p>
+      `), // Sanitized HTML body
+    };
+
+    // Send email
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log(error);
+      } else {
+        res.status(200).send({ success: true });
+      }
+    });
+  }
+});
+
 app.get("/", async (req, res) => {
   res.status(200).send("api running");
 });
+
+app.get("/api/location", async (req, res) => {
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  const geo = geoip.lookup(ip);
+  res.send(geo);
+});
+
+// app.listen(5000, function (err) {
+//   if (err) console.log("Error in server setup");
+//   console.log("Server listening on Port", 5000);
+// });
 
 module.exports = app;
