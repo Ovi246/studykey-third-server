@@ -75,19 +75,19 @@ app.post("/validate-order-id", async (req, res) => {
     });
 
     if (Object.keys(order).length > 0) {
-      // Get the order items
-      const orderItems = await sellingPartner.callAPI({
-        operation: "getOrderItems",
-        endpoint: "orders",
-        path: {
-          orderId: orderId,
-        },
-      });
+      // // Get the order items
+      // const orderItems = await sellingPartner.callAPI({
+      //   operation: "getOrderItems",
+      //   endpoint: "orders",
+      //   path: {
+      //     orderId: orderId,
+      //   },
+      // });
 
-      // Extract the ASINs from the order items
-      const asins = orderItems.OrderItems.map((item) => item.ASIN);
+      // // Extract the ASINs from the order items
+      // const asins = orderItems.OrderItems.map((item) => item.ASIN);
 
-      res.status(200).send({ valid: true, asins });
+      res.status(200).send({ valid: true });
     } else {
       res.status(400).send({ valid: false });
     }
@@ -105,23 +105,16 @@ app.post("/submit-review", async (req, res) => {
   if (formData) {
     let mailOptions = {
       from: process.env.GMAIL_USER, // Sender address
-      to: "Studykeyinserts@gmail.com", // Admin's email
-      subject: "New Order Submission", // Subject line
+      to: process.env.GMAIL_USER, // Admin's email
+      subject: "New PDF Claimed", // Subject line
       html: DOMPurify.sanitize(`
         <h1>New Order Submission</h1>
-        <p><strong>Product Name:</strong> ${formData.productName}</p>
-        <p><strong>Satisfaction:</strong> ${formData.satisfaction}</p>
-        <p><strong>Order ID:</strong> ${formData.orderId}</p>
-        <p><strong>Duration:</strong> ${formData.duration}</p>
-        <p><strong>First Name:</strong> ${formData.firstName}</p>
-        <p><strong>Last Name:</strong> ${formData.lastName}</p>
+        <p><strong>User Name:</strong> ${formData.name}</p>
+        <p><strong>Language:</strong> ${formData.language}</p>
+        <p><strong>Level:</strong> ${formData.level}</p>
         <p><strong>Email:</strong> ${formData.email}</p>
-        <p><strong>Address:</strong> ${formData.address}</p>
-        <p><strong>City:</strong> ${formData.city}</p>
-        <p><strong>ZIP Code:</strong> ${formData.zip}</p>
-        <p><strong>State:</strong> ${formData.state}</p>
-        <p><strong>Newsletter:</strong> ${formData.newsletter}</p>
-        <p><strong>Reviews:</strong> ${formData.reviews}</p>
+        <p><strong>Set:</strong> ${formData.set}</p>
+        <p><strong>OrderID:</strong> ${formData.orderId}</p>
       `), // Sanitized HTML body
     };
 
@@ -146,9 +139,9 @@ app.get("/api/location", async (req, res) => {
   res.send(geo);
 });
 
-// app.listen(5000, function (err) {
-//   if (err) console.log("Error in server setup");
-//   console.log("Server listening on Port", 5000);
-// });
+app.listen(5000, function (err) {
+  if (err) console.log("Error in server setup");
+  console.log("Server listening on Port", 5000);
+});
 
 module.exports = app;
