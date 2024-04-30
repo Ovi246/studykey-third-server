@@ -1,5 +1,5 @@
 const express = require("express");
-const geoip = require("geoip-lite");
+const geoip = require("fast-geoip");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const SellingPartnerAPI = require("amazon-sp-api");
