@@ -134,7 +134,7 @@ app.get("/", async (req, res) => {
 });
 
 app.get("/api/location", async (req, res) => {
-  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  const ip = req.ip || "127.0.0.1";
   const geo = geoip.lookup(ip);
   res.send(geo);
 });
