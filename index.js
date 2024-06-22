@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
-const allowedOrigins = ["https://studykey-riddles.vercel.app"];
+const allowedOrigins = ["https://studykey-gifts.vercel.app"];
 const nodemailer = require("nodemailer");
 
 const createDOMPurify = require("dompurify");
@@ -75,17 +75,17 @@ app.post("/validate-order-id", async (req, res) => {
     });
 
     if (Object.keys(order).length > 0) {
-      // // Get the order items
-      // const orderItems = await sellingPartner.callAPI({
-      //   operation: "getOrderItems",
-      //   endpoint: "orders",
-      //   path: {
-      //     orderId: orderId,
-      //   },
-      // });
+      // Get the order items
+      const orderItems = await sellingPartner.callAPI({
+        operation: "getOrderItems",
+        endpoint: "orders",
+        path: {
+          orderId: orderId,
+        },
+      });
 
-      // // Extract the ASINs from the order items
-      // const asins = orderItems.OrderItems.map((item) => item.ASIN);
+      // Extract the ASINs from the order items
+      const asins = orderItems.OrderItems.map((item) => item.ASIN);
 
       res.status(200).send({ valid: true });
     } else {
