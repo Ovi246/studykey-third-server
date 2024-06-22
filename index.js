@@ -7,7 +7,10 @@ const app = express();
 app.use(express.json());
 require("dotenv").config();
 const cors = require("cors");
-const allowedOrigins = ["https://studykey-gifts.vercel.app"];
+const allowedOrigins = [
+  "https://studykey-gifts.vercel.app",
+  "http://localhost:3000",
+];
 const nodemailer = require("nodemailer");
 
 const createDOMPurify = require("dompurify");
@@ -87,7 +90,7 @@ app.post("/validate-order-id", async (req, res) => {
       // Extract the ASINs from the order items
       const asins = orderItems.OrderItems.map((item) => item.ASIN);
 
-      res.status(200).send({ valid: true });
+      res.status(200).send({ valid: true, asins });
     } else {
       res.status(400).send({ valid: false });
     }
@@ -139,9 +142,9 @@ app.get("/api/location", async (req, res) => {
   res.send(geo);
 });
 
-// app.listen(5000, function (err) {
-//   if (err) console.log("Error in server setup");
-//   console.log("Server listening on Port", 5000);
-// });
+app.listen(5000, function (err) {
+  if (err) console.log("Error in server setup");
+  console.log("Server listening on Port", 5000);
+});
 
 module.exports = app;
