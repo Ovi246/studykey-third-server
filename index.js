@@ -11,7 +11,7 @@ require("dotenv").config();
 
 const cors = require("cors");
 const allowedOrigins = [
-  "https://studykey-riddles.vercel.app",
+  "https://studykey-gifts.vercel.app",
   // "http://localhost:3000",
 ];
 
@@ -195,6 +195,7 @@ app.post("/submit-review", async (req, res) => {
         html: DOMPurify.sanitize(`
           <h1>New Order Submission</h1>
           <p><strong>User Name:</strong> ${formData.name}</p>
+          <p><strong>User Address:</strong> ${formData.address}</p>
           <p><strong>Language:</strong> ${formData.language}</p>
           <p><strong>Level:</strong> ${formData.level}</p>
           <p><strong>Email:</strong> ${formData.email}</p>
