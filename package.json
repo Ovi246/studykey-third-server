@@ -20,8 +20,9 @@
     "firebase-admin": "^12.1.1",
     "helmet": "^7.1.0",
     "jsdom": "^24.0.0",
-    "mongoose": "^8.4.1",
+    "mongoose": "^8.7.3",
     "nodemailer": "^6.9.13",
-    "nodemailer-express-handlebars": "^6.1.2"
+    "nodemailer-express-handlebars": "^6.1.2",
+    "punycode": "^2.3.1"
   }
 }
