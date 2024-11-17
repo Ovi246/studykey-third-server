@@ -57,7 +57,9 @@ const Schema = mongoose.Schema;
 const OrderSchema = new Schema({
   name: String,
   language: String,
-  email: { type: String, unique: true },
+  email: { type: String, required: true },
+  orderId: { type: String, unique: true },
+  createdAt: { type: Date, default: Date.now }, // Add createdAt field
 });
 
 let Order;
@@ -248,13 +250,12 @@ app.post("/submit-review", async (req, res) => {
         .status(200)
         .json({ success: true, message: "Emails sent successfully" });
     } catch (err) {
-      // Check for duplicate key error
-      if (err.code === 11000 && err.keyPattern && err.keyPattern.email) {
+      console.log(err);
+      if (err.code === 11000 && err.keyPattern && err.keyPattern.orderId) {
         return res.status(409).json({
           success: false,
-          message:
-            "Error: E11000 duplicate key error collection: studykeygifts.orders index: email",
-          errorCode: "DUPLICATE_EMAIL",
+          message: "Error: Duplicate Claim",
+          errorCode: "DUPLICATE_CLAIM",
         });
       }
       res
