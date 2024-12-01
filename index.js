@@ -191,20 +191,17 @@ app.post("/submit-review", async (req, res) => {
 
       // Email to the admin
       let adminMailOptions = {
-        from: process.env.GMAIL_USER, // Sender address
-        to: process.env.GMAIL_USER, // Admin's email
-        subject: "New Soul Delight Claimed", // Subject line
+        from: process.env.GMAIL_USER,
+        to: process.env.GMAIL_USER,
+        subject: "New Soul Delight Claimed",
         html: DOMPurify.sanitize(`
           <h1>New Order Submission</h1>
-          <p><strong>User Name:</strong> ${formData.name}</p>
-          <p><strong>User Address:</strong> ${formData.address}</p>
-          <p><strong>Language:</strong> ${formData.language}</p>
-          <p><strong>Level:</strong> ${formData.level}</p>
-          <p><strong>Email:</strong> ${formData.email}</p>
-          <p><strong>Set:</strong> ${formData.set}</p>
-          <p><strong>OrderID:</strong> ${formData.orderId}</p>
-        `), // Sanitized HTML body
+          ${Object.entries(formData)
+            .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
+            .join("")}
+        `),
       };
+      
 
       // // Send email to the user
       // transporter.sendMail(userMailOptions, (error, info) => {
