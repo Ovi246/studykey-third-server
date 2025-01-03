@@ -4,6 +4,9 @@ const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const SellingPartnerAPI = require("amazon-sp-api");
 const path = require("path");
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 app.use(express.json());
@@ -12,7 +15,7 @@ require("dotenv").config();
 const cors = require("cors");
 const allowedOrigins = [
   "https://studykey-gifts.vercel.app",
-  // "http://localhost:3000",
+  "http://localhost:3001",
 ];
 
 const nodemailer = require("nodemailer");
@@ -168,28 +171,57 @@ app.post("/validate-order-id", async (req, res) => {
   }
 });
 
-app.post("/submit-review", async (req, res) => {
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
   const formData = req.body;
 
   if (formData) {
     try {
       await connectToDatabase();
-      const order = new Order(formData);
+
+      // Handle screenshot upload if present
+      let screenshotUrl = null;
+      if (req.file) {
+        // Upload to Cloudinary
+        const b64 = Buffer.from(req.file.buffer).toString("base64");
+        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: "review-screenshots",
+          resource_type: "auto",
+          public_id: `review-${formData.orderId}-${Date.now()}`,
+        });
+
+        screenshotUrl = result.secure_url;
+      }
+
+      const order = new Order({
+        ...formData,
+        reviewStatus: "pending",
+        reviewScreenshot: screenshotUrl,
+        reviewSubmittedAt: new Date(),
+      });
+
       await order.save();
 
       // Email to the user
       let userMailOptions = {
-        from: process.env.GMAIL_USER, // Sender address
-        to: formData.email, // User's email
-        subject: "Study Key FREE gift", // Subject line
-        template: "reward", // Name of the template file without extension
+        from: process.env.GMAIL_USER,
+        to: formData.email,
+        subject: "Study Key FREE gift",
+        template: "reward",
         context: {
-          // Variables to replace in the template
           name: formData.name,
         },
       };
 
-      // Email to the admin
+      // Update admin email to include screenshot
       let adminMailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
@@ -199,53 +231,44 @@ app.post("/submit-review", async (req, res) => {
           ${Object.entries(formData)
             .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
             .join("")}
+          ${
+            screenshotUrl
+              ? `<p><strong>Review Screenshot:</strong> <a href="${screenshotUrl}">View Screenshot</a></p>`
+              : ""
+          }
         `),
       };
-      
 
-      // // Send email to the user
-      // transporter.sendMail(userMailOptions, (error, info) => {
-      //   if (error) {
-      //     console.error(error);
-      //   } else {
-      //     // Send email to the admin
-      //     transporter.sendMail(adminMailOptions, (error, info) => {
-      //       if (error) {
-      //         console.error(error);
-      //       } else {
-      //         console.log(info);
-      //       }
-      //     });
-      //   }
-      // });
+      await Promise.all([
+        new Promise((resolve, reject) => {
+          transporter.sendMail(userMailOptions, (error, info) => {
+            if (error) {
+              console.error("Error sending email to user:", error);
+              reject(error);
+            } else {
+              console.log("Email sent to user:", info);
+              resolve(info);
+            }
+          });
+        }),
+        new Promise((resolve, reject) => {
+          transporter.sendMail(adminMailOptions, (error, info) => {
+            if (error) {
+              console.error("Error sending email to admin:", error);
+              reject(error);
+            } else {
+              console.log("Email sent to admin:", info);
+              resolve(info);
+            }
+          });
+        }),
+      ]);
 
-      await new Promise((resolve, reject) => {
-        transporter.sendMail(userMailOptions, (error, info) => {
-          if (error) {
-            console.error("Error sending email to user:", error);
-            reject(error);
-          } else {
-            console.log("Email sent to user:", info);
-            resolve(info);
-          }
-        });
+      res.status(200).json({
+        success: true,
+        message: "Emails sent successfully",
+        screenshotUrl: screenshotUrl,
       });
-
-      await new Promise((resolve, reject) => {
-        transporter.sendMail(adminMailOptions, (error, info) => {
-          if (error) {
-            console.error("Error sending email to user:", error);
-            reject(error);
-          } else {
-            console.log("Email sent to user:", info);
-            resolve(info);
-          }
-        });
-      });
-
-      res
-        .status(200)
-        .json({ success: true, message: "Emails sent successfully" });
     } catch (err) {
       console.log(err);
       if (err.code === 11000 && err.keyPattern && err.keyPattern.orderId) {
@@ -274,9 +297,9 @@ app.get("/api/location", async (req, res) => {
   res.send(geo);
 });
 
-// app.listen(5000, function (err) {
-//   if (err) console.log("Error in server setup");
-//   console.log("Server listening on Port", 5000);
-// });
+app.listen(5000, function (err) {
+  if (err) console.log("Error in server setup");
+  console.log("Server listening on Port", 5000);
+});
 
 module.exports = app;
