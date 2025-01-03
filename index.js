@@ -14,8 +14,8 @@ require("dotenv").config();
 
 const cors = require("cors");
 const allowedOrigins = [
-  "https://studykey-gifts.vercel.app",
-  "http://localhost:3001",
+  "https://study-key-reward.vercel.app/",
+  // "http://localhost:3000",
 ];
 
 const nodemailer = require("nodemailer");
@@ -297,9 +297,9 @@ app.get("/api/location", async (req, res) => {
   res.send(geo);
 });
 
-app.listen(5000, function (err) {
-  if (err) console.log("Error in server setup");
-  console.log("Server listening on Port", 5000);
-});
+// app.listen(5000, function (err) {
+//   if (err) console.log("Error in server setup");
+//   console.log("Server listening on Port", 5000);
+// });
 
 module.exports = app;
