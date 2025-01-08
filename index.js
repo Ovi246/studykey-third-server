@@ -7,6 +7,7 @@ const path = require("path");
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
+const { Parser } = require("json2csv");
 
 const app = express();
 app.use(express.json());
@@ -62,7 +63,8 @@ const OrderSchema = new Schema({
   language: String,
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
-  createdAt: { type: Date, default: Date.now }, // Add createdAt field
+  createdAt: { type: Date, default: Date.now },
+  reviewScreenshot: String,
 });
 
 let Order;
@@ -295,6 +297,27 @@ app.get("/api/location", async (req, res) => {
   const ip = req.ip || "127.0.0.1";
   const geo = await geoip.lookup(ip);
   res.send(geo);
+});
+
+app.get("/download-orders", async (req, res) => {
+  try {
+    await connectToDatabase();
+    const orders = await Order.find({});
+
+    if (orders.length === 0) {
+      return res.status(404).send("No orders found.");
+    }
+
+    const json2csvParser = new Parser();
+    const csv = json2csvParser.parse(orders);
+
+    res.header("Content-Type", "text/csv");
+    res.attachment("orders.csv");
+    res.send(csv);
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).send("An error occurred while fetching orders.");
+  }
 });
 
 // app.listen(5000, function (err) {
