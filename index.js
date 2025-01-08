@@ -227,7 +227,7 @@ app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
       let adminMailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
-        subject: "New Soul Delight Claimed",
+        subject: "New Testimonial Claimed",
         html: DOMPurify.sanitize(`
           <h1>New Order Submission</h1>
           ${Object.entries(formData)
