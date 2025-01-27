@@ -6,8 +6,16 @@ const SellingPartnerAPI = require("amazon-sp-api");
 const path = require("path");
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
-const upload = multer({ storage: multer.memoryStorage() });
 const { Parser } = require("json2csv");
+
+// Update multer configuration to handle larger files
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB limit for videos
+  },
+});
+
 
 const app = express();
 app.use(express.json());
@@ -16,7 +24,7 @@ require("dotenv").config();
 const cors = require("cors");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
-  // "http://localhost:3000",
+  // "http://localhost:3002",
 ];
 
 const nodemailer = require("nodemailer");
@@ -64,7 +72,12 @@ const OrderSchema = new Schema({
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
   createdAt: { type: Date, default: Date.now },
-  reviewScreenshot: String,
+  reviewMedia: String,
+  reviewType: {
+    type: String,
+    enum: ['image', 'video'],
+    required: true
+  },
 });
 
 let Order;
@@ -180,33 +193,46 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
+// Add a helper function to handle media uploads
+async function uploadToCloudinary(file, type) {
+  const b64 = Buffer.from(file.buffer).toString('base64');
+  const dataURI = `data:${file.mimetype};base64,${b64}`;
+  
+  return await cloudinary.uploader.upload(dataURI, {
+    folder: type === 'video' ? 'review-videos' : 'review-screenshots',
+    resource_type: 'auto',
+    public_id: `review-${Date.now()}`,
+    // Add specific options for videos
+    ...(type === 'video' && {
+      chunk_size: 6000000, // 6MB chunks
+      eager: [
+        { width: 720, height: 480, crop: "pad" }, // Lower resolution version
+      ],
+      eager_async: true,
+    })
+  });
+}
+
+app.post("/submit-review", upload.single("media"), async (req, res) => {
   const formData = req.body;
 
   if (formData) {
     try {
       await connectToDatabase();
 
-      // Handle screenshot upload if present
-      let screenshotUrl = null;
+      /// Handle media upload if present
+      let mediaUrl = null;
       if (req.file) {
-        // Upload to Cloudinary
-        const b64 = Buffer.from(req.file.buffer).toString("base64");
-        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
-
-        const result = await cloudinary.uploader.upload(dataURI, {
-          folder: "review-screenshots",
-          resource_type: "auto",
-          public_id: `review-${formData.orderId}-${Date.now()}`,
-        });
-
-        screenshotUrl = result.secure_url;
+        const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+        const result = await uploadToCloudinary(req.file, mediaType);
+        mediaUrl = result.secure_url;
       }
 
       const order = new Order({
         ...formData,
         reviewStatus: "pending",
-        reviewScreenshot: screenshotUrl,
+        reviewMedia: mediaUrl,
+        reviewType: req.file?.mimetype.startsWith('video/') ? 'video' : 'image',
         reviewSubmittedAt: new Date(),
       });
 
@@ -223,7 +249,7 @@ app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
         },
       };
 
-      // Update admin email to include screenshot
+      // Update admin email to include media
       let adminMailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
@@ -234,8 +260,9 @@ app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
             .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
             .join("")}
           ${
-            screenshotUrl
-              ? `<p><strong>Review Screenshot:</strong> <a href="${screenshotUrl}">View Screenshot</a></p>`
+            mediaUrl
+              ? `<p><strong>Review ${req.file?.mimetype.startsWith('video/') ? 'Video' : 'Screenshot'}:</strong> 
+                 <a href="${mediaUrl}">View Media</a></p>`
               : ""
           }
         `),
@@ -268,11 +295,11 @@ app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
 
       res.status(200).json({
         success: true,
-        message: "Emails sent successfully",
-        screenshotUrl: screenshotUrl,
+        message: "Submission successful",
+        mediaUrl: mediaUrl,
       });
     } catch (err) {
-      console.log(err);
+      console.error('Upload error:', err);
       if (err.code === 11000 && err.keyPattern && err.keyPattern.orderId) {
         return res.status(409).json({
           success: false,
@@ -280,9 +307,12 @@ app.post("/submit-review", upload.single("screenshot"), async (req, res) => {
           errorCode: "DUPLICATE_CLAIM",
         });
       }
-      res
-        .status(500)
-        .json({ success: false, message: "Error: " + err.message });
+      res.status(500).json({ 
+        success: false, 
+        message: err.message.includes('file size') 
+          ? "File size too large. Please upload a smaller file."
+          : "Error: " + err.message 
+      });
     }
   } else {
     res.status(400).json({ success: false, message: "Invalid form data" });
