@@ -34,7 +34,7 @@ require("dotenv").config();
 const cors = require("cors");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
-  "https://studykey-disneyworld-giveaway.vercel.app/",
+  "https://studykey-disneyworld-giveaway.vercel.app",
   // "http://localhost:5173",
 ];
 
