@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disney Ticket Draw Entry Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+        }
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #1a73e8;
+            color: white;
+            border-radius: 8px 8px 0 0;
+        }
+        .content {
+            padding: 30px;
+            background-color: #ffffff;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 0 0 8px 8px;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #1a73e8;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .highlight {
+            color: #1a73e8;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 Congratulations!</h1>
+        </div>
+        <div class="content">
+            <h2>Dear {{name}},</h2>
+            <p>Thank you for participating in our Disney Ticket Draw! Your entry has been successfully recorded.</p>
+            
+            <p>We're excited to have you join this amazing opportunity. Keep an eye on your email and our social media channels for the draw results.</p>
+
+            <div class="social-links">
+                <h3>Follow us on social media:</h3>
+                <a href="{{socialLinks.instagram}}">Instagram</a>
+                <a href="{{socialLinks.facebook}}">Facebook</a>
+                <a href="{{socialLinks.twitter}}">Twitter</a>
+            </div>
+
+            <p>Good luck! 🍀</p>
+            
+            <p>Best regards,<br>The Study Key Team</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message, please do not reply directly to this email.</p>
+        </div>
+    </div>
+</body>
+</html> 
