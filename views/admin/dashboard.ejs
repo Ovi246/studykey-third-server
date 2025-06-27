@@ -214,7 +214,7 @@
                             <th>Email</th>
                             <th>Phone</th>
                             <th>Date</th>
-                            <th>Screenshot</th>
+                            <!-- <th>Screenshot</th> -->
                         </tr>
                     </thead>
                     <tbody>
@@ -226,13 +226,13 @@
                                     <td><%= claim.email %></td>
                                     <td><%= claim.phoneNumber %></td>
                                     <td><%= formatDate(claim.createdAt) %></td>
-                                    <td>
+                                    <!-- <td>
                                         <a href="<%= claim.reviewScreenshot %>" 
                                            target="_blank" 
                                            class="screenshot-link">
                                             <i class='bx bx-image'></i> View
                                         </a>
-                                    </td>
+                                    </td> -->
                                 </tr>
                             <% }); %>
                         <% } else { %>

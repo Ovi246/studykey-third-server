@@ -96,7 +96,6 @@ const TicketClaimSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
   phoneNumber: { type: String, required: true },
-  reviewScreenshot: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -367,17 +366,17 @@ const createErrorResponse = (type, message) => ({
 app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
   const formData = req.body;
 
-  if (formData && req.file) {
+  if (formData) {
     try {
       await connectToDatabase();
 
-      // Upload screenshot to Cloudinary
-      const result = await uploadToCloudinary(req.file, 'image');
-      const screenshotUrl = result.secure_url;
+      // // Upload screenshot to Cloudinary
+      // const result = await uploadToCloudinary(req.file, 'image');
+      // const screenshotUrl = result.secure_url;
 
       const ticketClaim = new TicketClaim({
         ...formData,
-        reviewScreenshot: screenshotUrl,
+        // reviewScreenshot: screenshotUrl,
       });
 
       await ticketClaim.save();
@@ -408,7 +407,7 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
           ${Object.entries(formData)
             .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
             .join("")}
-          <p><strong>Review Screenshot:</strong> <a href="${screenshotUrl}">View Screenshot</a></p>
+          
         `),
       };
 
@@ -440,7 +439,7 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
       res.status(200).json({
         success: true,
         message: "Ticket claim submitted successfully",
-        screenshotUrl: screenshotUrl,
+        // screenshotUrl: screenshotUrl,
       });
     } catch (err) {
       console.error('Upload error:', err);
