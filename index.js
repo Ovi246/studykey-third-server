@@ -184,7 +184,7 @@ app.post("/validate-order-id", async (req, res) => {
 
       res.status(200).send({ valid: true, asins: asins });
     } else {
-      res.status(200).send({ valid: true, asins: "asins" });
+      res.status(404).send({ valid: false });
     }
   } catch (error) {
     console.error(error);
