@@ -1,35 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Study Key Reward</title>
   <style>
     body {
       font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      background-color: #f8f9fa;
     }
     .container {
       width: 100%;
+      max-width: 600px;
       margin: 0 auto;
       background-color: #f8f9fa;
       padding: 20px;
       border-radius: 5px;
+      box-sizing: border-box;
     }
     .container img {
       width: 200px;
       display: block;
       margin: 0 auto;
+      max-width: 100%;
+      height: auto;
     }
     .reward-email {
       background-color: white;
       margin: 0 auto;
-      width: 40%;
+      width: 100%;
+      max-width: 600px;
+      box-sizing: border-box;
     }
     .reward-email-texts {
       padding: 20px;
     }
     .reward-email h1 {
       color: #6c757d;
+      margin-top: 0;
     }
     .reward-email p {
       color: #6c757d;
+      line-height: 1.5;
     }
     .reward-email img {
       width: 100%;
@@ -37,9 +53,24 @@
       border-bottom: 10px solid blue;
       border-bottom-left-radius: 10px;
       border-bottom-right-radius: 10px;
+      display: block;
+      height: auto;
     }
     .title {
       font-weight: 900;
+    }
+    
+    /* Mobile responsive styles */
+    @media only screen and (max-width: 600px) {
+      .container {
+        padding: 10px;
+      }
+      .reward-email-texts {
+        padding: 15px;
+      }
+      .container img {
+        width: 150px;
+      }
     }
   </style>
 </head>
