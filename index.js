@@ -1,32 +1,18 @@
 const express = require("express");
-const geoip = require("fast-geoip");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
+const cloudinary = require("cloudinary");
 const SellingPartnerAPI = require("amazon-sp-api");
 const path = require("path");
-const cloudinary = require("cloudinary").v2;
-const multer = require("multer");
 const { Parser } = require("json2csv");
 const ejs = require("ejs");
-const PDFDocument = require('pdfkit');
-
-// Update multer configuration to handle multiple upload types
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-  },
-});
-
-// Create separate upload handlers for different routes
-const uploadReviewScreenshot = upload.single('reviewScreenshot');
-const uploadMedia = upload.single('media');
+const PDFDocument = require("pdfkit");
 
 const app = express();
 
 // Set up EJS as the view engine
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
 
 app.use(express.json());
 require("dotenv").config();
@@ -83,12 +69,6 @@ const OrderSchema = new Schema({
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
   createdAt: { type: Date, default: Date.now },
-  reviewMedia: String,
-  reviewType: {
-    type: String,
-    enum: ['image', 'video'],
-    required: true
-  },
 });
 
 const TicketClaimSchema = new Schema({
@@ -179,6 +159,7 @@ let sellingPartner = new SellingPartnerAPI({
 
 app.post("/validate-order-id", async (req, res) => {
   const { orderId } = req.body;
+  console.log(req.body);
   try {
     const order = await sellingPartner.callAPI({
       operation: "getOrder",
@@ -203,7 +184,7 @@ app.post("/validate-order-id", async (req, res) => {
 
       res.status(200).send({ valid: true, asins: asins });
     } else {
-      res.status(400).send({ valid: false });
+      res.status(200).send({ valid: true, asins: "asins" });
     }
   } catch (error) {
     console.error(error);
@@ -220,48 +201,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Add a helper function to handle media uploads
-async function uploadToCloudinary(file, type) {
-  const b64 = Buffer.from(file.buffer).toString('base64');
-  const dataURI = `data:${file.mimetype};base64,${b64}`;
-  
-  return await cloudinary.uploader.upload(dataURI, {
-    folder: type === 'video' ? 'review-videos' : 'review-screenshots',
-    resource_type: 'auto',
-    public_id: `review-${Date.now()}`,
-    // Add specific options for videos
-    ...(type === 'video' && {
-      chunk_size: 6000000, // 6MB chunks
-      eager: [
-        { width: 720, height: 480, crop: "pad" }, // Lower resolution version
-      ],
-      eager_async: true,
-    })
-  });
-}
-
-app.post("/submit-review", uploadMedia, async (req, res) => {
+app.post("/submit-review", async (req, res) => {
   const formData = req.body;
 
   if (formData) {
     try {
       await connectToDatabase();
 
-      /// Handle media upload if present
-      let mediaUrl = null;
-      if (req.file) {
-        const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
-        const result = await uploadToCloudinary(req.file, mediaType);
-        mediaUrl = result.secure_url;
-      }
-
-      const order = new Order({
-        ...formData,
-        reviewStatus: "pending",
-        reviewMedia: mediaUrl,
-        reviewType: req.file?.mimetype.startsWith('video/') ? 'video' : 'image',
-        reviewSubmittedAt: new Date(),
-      });
+      const order = new Order(formData);
 
       await order.save();
 
@@ -288,7 +235,11 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
             .join("")}
           ${
             mediaUrl
-              ? `<p><strong>Review ${req.file?.mimetype.startsWith('video/') ? 'Video' : 'Screenshot'}:</strong> 
+              ? `<p><strong>Review ${
+                  req.file?.mimetype.startsWith("video/")
+                    ? "Video"
+                    : "Screenshot"
+                }:</strong> 
                  <a href="${mediaUrl}">View Media</a></p>`
               : ""
           }
@@ -326,7 +277,7 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
         mediaUrl: mediaUrl,
       });
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error("Upload error:", err);
       if (err.code === 11000 && err.keyPattern && err.keyPattern.orderId) {
         return res.status(409).json({
           success: false,
@@ -334,11 +285,11 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
           errorCode: "DUPLICATE_CLAIM",
         });
       }
-      res.status(500).json({ 
-        success: false, 
-        message: err.message.includes('file size') 
+      res.status(500).json({
+        success: false,
+        message: err.message.includes("file size")
           ? "File size too large. Please upload a smaller file."
-          : "Error: " + err.message 
+          : "Error: " + err.message,
       });
     }
   } else {
@@ -348,10 +299,10 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
 
 // Error types for frontend handling
 const ErrorTypes = {
-  DUPLICATE_CLAIM: 'DUPLICATE_CLAIM',
-  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
-  INVALID_DATA: 'INVALID_DATA',
-  SERVER_ERROR: 'SERVER_ERROR'
+  DUPLICATE_CLAIM: "DUPLICATE_CLAIM",
+  FILE_TOO_LARGE: "FILE_TOO_LARGE",
+  INVALID_DATA: "INVALID_DATA",
+  SERVER_ERROR: "SERVER_ERROR",
 };
 
 // Error response helper
@@ -359,25 +310,19 @@ const createErrorResponse = (type, message) => ({
   success: false,
   error: {
     type,
-    message
-  }
+    message,
+  },
 });
 
-app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
+app.post("/claim-ticket", async (req, res) => {
   const formData = req.body;
 
+  console.log(formData);
   if (formData) {
     try {
       await connectToDatabase();
 
-      // // Upload screenshot to Cloudinary
-      // const result = await uploadToCloudinary(req.file, 'image');
-      // const screenshotUrl = result.secure_url;
-
-      const ticketClaim = new TicketClaim({
-        ...formData,
-        // reviewScreenshot: screenshotUrl,
-      });
+      const ticketClaim = new TicketClaim(formData);
 
       await ticketClaim.save();
 
@@ -392,8 +337,8 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
           socialLinks: {
             instagram: "https://instagram.com/yourhandle",
             facebook: "https://facebook.com/yourpage",
-            twitter: "https://twitter.com/yourhandle"
-          }
+            twitter: "https://twitter.com/yourhandle",
+          },
         },
       };
 
@@ -442,52 +387,62 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
         // screenshotUrl: screenshotUrl,
       });
     } catch (err) {
-      console.error('Upload error:', err);
-      
+      console.error("Upload error:", err);
+
       // Handle specific error cases
       if (err.code === 11000 && err.keyPattern && err.keyPattern.orderId) {
-        return res.status(409).json(
-          createErrorResponse(
-            ErrorTypes.DUPLICATE_CLAIM,
-            "This order ID has already been claimed. Please check your order ID or contact support if you believe this is an error."
-          )
-        );
+        return res
+          .status(409)
+          .json(
+            createErrorResponse(
+              ErrorTypes.DUPLICATE_CLAIM,
+              "This order ID has already been claimed. Please check your order ID or contact support if you believe this is an error."
+            )
+          );
       }
 
-      if (err.message && err.message.includes('file size')) {
-        return res.status(400).json(
-          createErrorResponse(
-            ErrorTypes.FILE_TOO_LARGE,
-            "The file size is too large. Please upload a file smaller than 100MB."
-          )
-        );
+      if (err.message && err.message.includes("file size")) {
+        return res
+          .status(400)
+          .json(
+            createErrorResponse(
+              ErrorTypes.FILE_TOO_LARGE,
+              "The file size is too large. Please upload a file smaller than 100MB."
+            )
+          );
       }
 
       // Handle validation errors
-      if (err.name === 'ValidationError') {
-        return res.status(400).json(
-          createErrorResponse(
-            ErrorTypes.INVALID_DATA,
-            "Please check your input data. All fields are required and must be valid."
-          )
-        );
+      if (err.name === "ValidationError") {
+        return res
+          .status(400)
+          .json(
+            createErrorResponse(
+              ErrorTypes.INVALID_DATA,
+              "Please check your input data. All fields are required and must be valid."
+            )
+          );
       }
 
       // Handle any other errors
-      return res.status(500).json(
-        createErrorResponse(
-          ErrorTypes.SERVER_ERROR,
-          "An unexpected error occurred. Please try again later."
-        )
-      );
+      return res
+        .status(500)
+        .json(
+          createErrorResponse(
+            ErrorTypes.SERVER_ERROR,
+            "An unexpected error occurred. Please try again later."
+          )
+        );
     }
   } else {
-    return res.status(400).json(
-      createErrorResponse(
-        ErrorTypes.INVALID_DATA,
-        "Please provide all required information and a screenshot."
-      )
-    );
+    return res
+      .status(400)
+      .json(
+        createErrorResponse(
+          ErrorTypes.INVALID_DATA,
+          "Please provide all required information and a screenshot."
+        )
+      );
   }
 });
 
@@ -497,23 +452,20 @@ app.get("/api/ticket-claims", async (req, res) => {
     await connectToDatabase();
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || '';
+    const search = req.query.search || "";
     const skip = (page - 1) * limit;
 
     const query = {
       $or: [
-        { orderId: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ]
+        { orderId: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ],
     };
 
     const [claims, total] = await Promise.all([
-      TicketClaim.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      TicketClaim.countDocuments(query)
+      TicketClaim.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      TicketClaim.countDocuments(query),
     ]);
 
     res.status(200).json({
@@ -521,26 +473,28 @@ app.get("/api/ticket-claims", async (req, res) => {
       pagination: {
         total,
         page,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     console.error("Error fetching ticket claims:", error);
-    res.status(500).json({ success: false, message: "Error fetching ticket claims" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching ticket claims" });
   }
 });
 
 // Admin authentication middleware
 const verifyAdminToken = (req, res, next) => {
-  const token = req.headers['x-admin-token'] || req.query.token;
-  
+  const token = req.headers["x-admin-token"] || req.query.token;
+
   if (!token || token !== process.env.ADMIN_SECRET_TOKEN) {
-    return res.status(401).render('error', { 
+    return res.status(401).render("error", {
       message: "Unauthorized access. Please provide a valid admin token.",
-      token: null // Explicitly set token to null for unauthorized access
+      token: null, // Explicitly set token to null for unauthorized access
     });
   }
-  
+
   // Add token to res.locals for all subsequent middleware and routes
   res.locals.token = token;
   next();
@@ -552,20 +506,22 @@ app.get("/admin", verifyAdminToken, async (req, res) => {
     await connectToDatabase();
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || '';
-    const sortBy = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-    const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+    const search = req.query.search || "";
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate)
+      : null;
     const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
     const skip = (page - 1) * limit;
 
     // Build query
     const query = {
       $or: [
-        { orderId: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ]
+        { orderId: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ],
     };
 
     // Add date range if provided
@@ -580,29 +536,29 @@ app.get("/admin", verifyAdminToken, async (req, res) => {
         .sort({ [sortBy]: sortOrder })
         .skip(skip)
         .limit(limit),
-      TicketClaim.countDocuments(query)
+      TicketClaim.countDocuments(query),
     ]);
 
-    res.render('admin/dashboard', {
+    res.render("admin/dashboard", {
       claims,
       pagination: {
         total,
         page,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / limit),
       },
       search,
       sortBy,
       sortOrder,
-      startDate: startDate ? startDate.toISOString().split('T')[0] : '',
-      endDate: endDate ? endDate.toISOString().split('T')[0] : '',
+      startDate: startDate ? startDate.toISOString().split("T")[0] : "",
+      endDate: endDate ? endDate.toISOString().split("T")[0] : "",
       formatDate: (date) => new Date(date).toLocaleString(),
-      token: res.locals.token // Use token from res.locals
+      token: res.locals.token, // Use token from res.locals
     });
   } catch (error) {
     console.error("Error fetching ticket claims:", error);
-    res.status(500).render('error', { 
+    res.status(500).render("error", {
       message: "Error fetching ticket claims",
-      token: res.locals.token // Use token from res.locals
+      token: res.locals.token, // Use token from res.locals
     });
   }
 });
@@ -642,19 +598,21 @@ app.get("/download-orders", async (req, res) => {
 app.get("/download-claims", verifyAdminToken, async (req, res) => {
   try {
     await connectToDatabase();
-    const format = req.query.format || 'csv';
-    const search = req.query.search || '';
-    const sortBy = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-    const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+    const format = req.query.format || "csv";
+    const search = req.query.search || "";
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate)
+      : null;
     const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
-    
+
     const query = {
       $or: [
-        { orderId: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ]
+        { orderId: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ],
     };
 
     // Add date range if provided
@@ -664,33 +622,34 @@ app.get("/download-claims", verifyAdminToken, async (req, res) => {
       if (endDate) query.createdAt.$lte = endDate;
     }
 
-    const claims = await TicketClaim.find(query)
-      .sort({ [sortBy]: sortOrder });
+    const claims = await TicketClaim.find(query).sort({ [sortBy]: sortOrder });
 
     if (claims.length === 0) {
       return res.status(404).send("No claims found.");
     }
 
-    if (format === 'pdf') {
+    if (format === "pdf") {
       // Create PDF
       const doc = new PDFDocument();
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'attachment; filename=claims.pdf');
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "attachment; filename=claims.pdf");
       doc.pipe(res);
 
       // Add title and filters
-      doc.fontSize(20).text('Ticket Claims Report', { align: 'center' });
+      doc.fontSize(20).text("Ticket Claims Report", { align: "center" });
       doc.moveDown();
-      
+
       // Add filter information
       doc.fontSize(10);
       if (search) doc.text(`Search: ${search}`, 50, 100);
-      if (startDate) doc.text(`Start Date: ${startDate.toLocaleDateString()}`, 50, 120);
-      if (endDate) doc.text(`End Date: ${endDate.toLocaleDateString()}`, 50, 140);
+      if (startDate)
+        doc.text(`Start Date: ${startDate.toLocaleDateString()}`, 50, 120);
+      if (endDate)
+        doc.text(`End Date: ${endDate.toLocaleDateString()}`, 50, 140);
       doc.moveDown();
 
       // Add table headers
-      const headers = ['Order ID', 'Name', 'Email', 'Phone', 'Date'];
+      const headers = ["Order ID", "Name", "Email", "Phone", "Date"];
       let y = 200;
       let x = 50;
       const rowHeight = 30;
@@ -698,33 +657,38 @@ app.get("/download-claims", verifyAdminToken, async (req, res) => {
 
       // Draw headers
       headers.forEach((header, i) => {
-        doc.text(header, x + (i * colWidth), y);
+        doc.text(header, x + i * colWidth, y);
       });
       y += rowHeight;
 
       // Draw data rows
-      claims.forEach(claim => {
-        if (y > 700) { // Start new page if near bottom
+      claims.forEach((claim) => {
+        if (y > 700) {
+          // Start new page if near bottom
           doc.addPage();
           y = 50;
         }
         doc.text(claim.orderId, x, y);
         doc.text(claim.name, x + colWidth, y);
-        doc.text(claim.email, x + (colWidth * 2), y);
-        doc.text(claim.phoneNumber, x + (colWidth * 3), y);
-        doc.text(new Date(claim.createdAt).toLocaleString(), x + (colWidth * 4), y);
+        doc.text(claim.email, x + colWidth * 2, y);
+        doc.text(claim.phoneNumber, x + colWidth * 3, y);
+        doc.text(
+          new Date(claim.createdAt).toLocaleString(),
+          x + colWidth * 4,
+          y
+        );
         y += rowHeight;
       });
 
       doc.end();
     } else {
       // Create CSV
-      const fields = ['orderId', 'name', 'email', 'phoneNumber', 'createdAt'];
+      const fields = ["orderId", "name", "email", "phoneNumber", "createdAt"];
       const json2csvParser = new Parser({ fields });
       const csv = json2csvParser.parse(claims);
 
-      res.header('Content-Type', 'text/csv');
-      res.attachment('claims.csv');
+      res.header("Content-Type", "text/csv");
+      res.attachment("claims.csv");
       res.send(csv);
     }
   } catch (error) {
