@@ -69,6 +69,13 @@ const OrderSchema = new Schema({
   language: String,
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
+  fullName: String,
+  country: String,
+  streetAddress: String,
+  city: String,
+  state: String,
+  zipCode: String,
+  phoneNumber: String,
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -202,11 +209,16 @@ app.post("/submit-review", async (req, res) => {
     try {
       await connectToDatabase();
 
-      const order = new Order({
+      // Process form data to extract country and state names
+      const processedData = {
         ...formData,
+        country: formData.country?.name || formData.country,
+        state: formData.state?.name || formData.state,
         reviewStatus: "pending",
         reviewSubmittedAt: new Date(),
-      });
+      };
+
+      const order = new Order(processedData);
 
       await order.save();
 
@@ -228,9 +240,25 @@ app.post("/submit-review", async (req, res) => {
         subject: "New Testimonial Claimed",
         html: DOMPurify.sanitize(`
           <h1>New Order Submission</h1>
-          ${Object.entries(formData)
-            .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
-            .join("")}
+          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h3>Order Information</h3>
+            <p><strong>Order ID:</strong> ${processedData.orderId || 'N/A'}</p>
+            <p><strong>Full Name:</strong> ${processedData.fullName || 'N/A'}</p>
+            <p><strong>Email:</strong> ${processedData.email || 'N/A'}</p>
+            <p><strong>Phone Number:</strong> ${processedData.phoneNumber || 'N/A'}</p>
+            
+            <h3>Shipping Address</h3>
+            <p><strong>Street Address:</strong> ${processedData.streetAddress || 'N/A'}</p>
+            <p><strong>City:</strong> ${processedData.city || 'N/A'}</p>
+            <p><strong>State:</strong> ${processedData.state || 'N/A'}</p>
+            <p><strong>ZIP Code:</strong> ${processedData.zipCode || 'N/A'}</p>
+            <p><strong>Country:</strong> ${processedData.country || 'N/A'}</p>
+            
+            <h3>Additional Information</h3>
+            <p><strong>Name (Original):</strong> ${processedData.name || 'N/A'}</p>
+            <p><strong>Language:</strong> ${processedData.language || 'N/A'}</p>
+            <p><strong>Submitted At:</strong> ${new Date(processedData.reviewSubmittedAt).toLocaleString()}</p>
+          </div>
         `),
       };
 
