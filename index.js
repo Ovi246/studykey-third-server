@@ -4,23 +4,10 @@ const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const SellingPartnerAPI = require("amazon-sp-api");
 const path = require("path");
-const cloudinary = require("cloudinary").v2;
-const multer = require("multer");
 const { Parser } = require("json2csv");
 const ejs = require("ejs");
 const PDFDocument = require('pdfkit');
 
-// Update multer configuration to handle multiple upload types
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-  },
-});
-
-// Create separate upload handlers for different routes
-const uploadReviewScreenshot = upload.single('reviewScreenshot');
-const uploadMedia = upload.single('media');
 
 const app = express();
 
@@ -35,7 +22,7 @@ const cors = require("cors");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
   "https://studykey-disneyworld-giveaway.vercel.app",
-  // "http://localhost:5173",
+  // "http://localhost:3000",
 ];
 
 const nodemailer = require("nodemailer");
@@ -83,12 +70,6 @@ const OrderSchema = new Schema({
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
   createdAt: { type: Date, default: Date.now },
-  reviewMedia: String,
-  reviewType: {
-    type: String,
-    enum: ['image', 'video'],
-    required: true
-  },
 });
 
 const TicketClaimSchema = new Schema({
@@ -213,53 +194,17 @@ app.post("/validate-order-id", async (req, res) => {
   }
 });
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
-// Add a helper function to handle media uploads
-async function uploadToCloudinary(file, type) {
-  const b64 = Buffer.from(file.buffer).toString('base64');
-  const dataURI = `data:${file.mimetype};base64,${b64}`;
-  
-  return await cloudinary.uploader.upload(dataURI, {
-    folder: type === 'video' ? 'review-videos' : 'review-screenshots',
-    resource_type: 'auto',
-    public_id: `review-${Date.now()}`,
-    // Add specific options for videos
-    ...(type === 'video' && {
-      chunk_size: 6000000, // 6MB chunks
-      eager: [
-        { width: 720, height: 480, crop: "pad" }, // Lower resolution version
-      ],
-      eager_async: true,
-    })
-  });
-}
-
-app.post("/submit-review", uploadMedia, async (req, res) => {
+app.post("/submit-review", async (req, res) => {
   const formData = req.body;
 
   if (formData) {
     try {
       await connectToDatabase();
 
-      /// Handle media upload if present
-      let mediaUrl = null;
-      if (req.file) {
-        const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
-        const result = await uploadToCloudinary(req.file, mediaType);
-        mediaUrl = result.secure_url;
-      }
-
       const order = new Order({
         ...formData,
         reviewStatus: "pending",
-        reviewMedia: mediaUrl,
-        reviewType: req.file?.mimetype.startsWith('video/') ? 'video' : 'image',
         reviewSubmittedAt: new Date(),
       });
 
@@ -276,7 +221,7 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
         },
       };
 
-      // Update admin email to include media
+      // Admin notification email
       let adminMailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
@@ -286,12 +231,6 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
           ${Object.entries(formData)
             .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
             .join("")}
-          ${
-            mediaUrl
-              ? `<p><strong>Review ${req.file?.mimetype.startsWith('video/') ? 'Video' : 'Screenshot'}:</strong> 
-                 <a href="${mediaUrl}">View Media</a></p>`
-              : ""
-          }
         `),
       };
 
@@ -323,7 +262,6 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
       res.status(200).json({
         success: true,
         message: "Submission successful",
-        mediaUrl: mediaUrl,
       });
     } catch (err) {
       console.error('Upload error:', err);
@@ -336,9 +274,7 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
       }
       res.status(500).json({ 
         success: false, 
-        message: err.message.includes('file size') 
-          ? "File size too large. Please upload a smaller file."
-          : "Error: " + err.message 
+        message: "Error: " + err.message 
       });
     }
   } else {
@@ -349,7 +285,6 @@ app.post("/submit-review", uploadMedia, async (req, res) => {
 // Error types for frontend handling
 const ErrorTypes = {
   DUPLICATE_CLAIM: 'DUPLICATE_CLAIM',
-  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   INVALID_DATA: 'INVALID_DATA',
   SERVER_ERROR: 'SERVER_ERROR'
 };
@@ -363,20 +298,15 @@ const createErrorResponse = (type, message) => ({
   }
 });
 
-app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
+app.post("/claim-ticket", async (req, res) => {
   const formData = req.body;
 
   if (formData) {
     try {
       await connectToDatabase();
 
-      // // Upload screenshot to Cloudinary
-      // const result = await uploadToCloudinary(req.file, 'image');
-      // const screenshotUrl = result.secure_url;
-
       const ticketClaim = new TicketClaim({
         ...formData,
-        // reviewScreenshot: screenshotUrl,
       });
 
       await ticketClaim.save();
@@ -439,7 +369,6 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
       res.status(200).json({
         success: true,
         message: "Ticket claim submitted successfully",
-        // screenshotUrl: screenshotUrl,
       });
     } catch (err) {
       console.error('Upload error:', err);
@@ -454,14 +383,6 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
         );
       }
 
-      if (err.message && err.message.includes('file size')) {
-        return res.status(400).json(
-          createErrorResponse(
-            ErrorTypes.FILE_TOO_LARGE,
-            "The file size is too large. Please upload a file smaller than 100MB."
-          )
-        );
-      }
 
       // Handle validation errors
       if (err.name === 'ValidationError') {
@@ -485,7 +406,7 @@ app.post("/claim-ticket", uploadReviewScreenshot, async (req, res) => {
     return res.status(400).json(
       createErrorResponse(
         ErrorTypes.INVALID_DATA,
-        "Please provide all required information and a screenshot."
+        "Please provide all required information."
       )
     );
   }
