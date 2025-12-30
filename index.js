@@ -21,6 +21,7 @@ const cors = require("cors");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
   "https://studykey-disneyworld-giveaway.vercel.app",
+  // "http://localhost:5000",
   // "http://localhost:5173",
 ];
 
@@ -76,11 +77,15 @@ const TicketClaimSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
   phoneNumber: { type: String, required: true },
+  asin: { type: String }, // Product ASIN
+  productName: { type: String }, // Product name from Amazon
+  productUrl: { type: String }, // Amazon product URL
   createdAt: { type: Date, default: Date.now },
 });
 
 let Order;
 let TicketClaim;
+let FeedbackTracker;
 
 if (mongoose.models.Order) {
   Order = mongoose.model("Order");
@@ -93,6 +98,9 @@ if (mongoose.models.TicketClaim) {
 } else {
   TicketClaim = mongoose.model("TicketClaim", TicketClaimSchema);
 }
+
+// Import FeedbackTracker model
+FeedbackTracker = require('./models/FeedbackTracker');
 
 const handlebars = require("nodemailer-express-handlebars");
 
@@ -119,8 +127,33 @@ transporter.use(
   })
 );
 
-// Enable various security headers
-app.use(helmet());
+// Enable various security headers with relaxed CSP for admin dashboard
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdn.jsdelivr.net",
+        ],
+        scriptSrcAttr: ["'none'"], // Block inline event handlers
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdn.jsdelivr.net",
+        ],
+        fontSrc: [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+        ],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+      },
+    },
+  })
+);
 
 // Limit requests to 100 per hour per IP
 const limiter = rateLimit({
@@ -144,6 +177,13 @@ app.use(
     },
   })
 );
+
+// Import admin routes
+const feedbackAdminRoutes = require('./routes/admin/feedback');
+app.use('/api/admin', feedbackAdminRoutes);
+
+// Import email scheduler
+const { processPendingEmails, sendFeedbackEmail } = require('./services/emailScheduler');
 
 let sellingPartner = new SellingPartnerAPI({
   region: "na", // The region of the selling partner API endpoint ("eu", "na" or "fe")
@@ -179,10 +219,19 @@ app.post("/validate-order-id", async (req, res) => {
         },
       });
 
-      // Extract the ASINs from the order items
+      // Extract the ASINs and product info from the order items
       const asins = orderItems.OrderItems.map((item) => item.ASIN);
+      const products = orderItems.OrderItems.map((item) => ({
+        asin: item.ASIN,
+        title: item.Title,
+        quantity: item.QuantityOrdered
+      }));
 
-      res.status(200).send({ valid: true, asins: asins });
+      res.status(200).send({ 
+        valid: true, 
+        asins: asins,
+        products: products
+      });
     } else {
       res.status(404).send({ valid: false });
     }
@@ -322,9 +371,52 @@ app.post("/claim-ticket", async (req, res) => {
     try {
       await connectToDatabase();
 
-      const ticketClaim = new TicketClaim(formData);
+      // Handle ASIN - convert array to string if needed
+      let asin = formData.asin;
+      if (Array.isArray(asin) && asin.length > 0) {
+        asin = asin[0]; // Take first ASIN if multiple
+      }
+
+      // Generate Amazon URLs if ASIN is provided
+      let productUrl = '';
+      let reviewUrl = '';
+      if (asin) {
+        productUrl = `https://www.amazon.com/dp/${asin}`;
+        reviewUrl = `https://www.amazon.com/review/create-review?asin=${asin}`;
+      }
+
+      const ticketClaim = new TicketClaim({
+        ...formData,
+        asin: asin,
+        productUrl,
+      });
 
       await ticketClaim.save();
+
+      // Create feedback tracker for automated emails
+      try {
+        const submissionDate = new Date();
+        const feedbackTracker = new FeedbackTracker({
+          orderId: formData.orderId,
+          customerEmail: formData.email,
+          customerName: formData.name,
+          phoneNumber: formData.phoneNumber,
+          asin: asin,
+          productName: formData.productName,
+          productUrl: productUrl,
+          reviewUrl: reviewUrl,
+          submissionDate: submissionDate,
+          emailSchedule: FeedbackTracker.createScheduledDates(submissionDate),
+          status: 'pending',
+          isActive: true
+        });
+        
+        await feedbackTracker.save();
+        console.log('✓ Feedback tracker created for order:', formData.orderId);
+      } catch (trackerError) {
+        console.error('Error creating feedback tracker (non-critical):', trackerError);
+        // Don't fail the request if tracker creation fails
+      }
 
       // Email to the user
       let userMailOptions = {
@@ -484,7 +576,7 @@ app.get("/api/ticket-claims", async (req, res) => {
   }
 });
 
-// Admin authentication middleware
+// Admin authentication middleware - Single token approach
 const verifyAdminToken = (req, res, next) => {
   const token = req.headers["x-admin-token"] || req.query.token;
 
@@ -499,6 +591,43 @@ const verifyAdminToken = (req, res, next) => {
   res.locals.token = token;
   next();
 };
+
+// Delete ticket claim by Order ID (must be after verifyAdminToken)
+app.delete("/api/admin/ticket-claims/:orderId", verifyAdminToken, async (req, res) => {
+  try {
+    await connectToDatabase();
+    const orderId = req.params.orderId;
+    
+    const result = await TicketClaim.deleteOne({ orderId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Ticket claim not found"
+      });
+    }
+    
+    // Also delete associated feedback tracker if exists
+    try {
+      await FeedbackTracker.deleteOne({ orderId });
+      console.log(`Also deleted feedback tracker for order: ${orderId}`);
+    } catch (trackerError) {
+      console.log(`No feedback tracker found for order: ${orderId}`);
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: "Ticket claim deleted successfully"
+    });
+    
+  } catch (error) {
+    console.error("Error deleting ticket claim:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // Admin routes with token verification
 app.get("/admin", verifyAdminToken, async (req, res) => {
@@ -559,6 +688,94 @@ app.get("/admin", verifyAdminToken, async (req, res) => {
     res.status(500).render("error", {
       message: "Error fetching ticket claims",
       token: res.locals.token, // Use token from res.locals
+    });
+  }
+});
+
+// Admin route for feedback manager
+app.get("/admin/feedback", verifyAdminToken, async (req, res) => {
+  try {
+    await connectToDatabase();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || "";
+    const status = req.query.status || "";
+    const skip = (page - 1) * limit;
+
+    // Build query
+    const query = {};
+    if (status) {
+      query.status = status;
+    }
+    if (search) {
+      query.$or = [
+        { orderId: { $regex: search, $options: "i" } },
+        { customerName: { $regex: search, $options: "i" } },
+        { customerEmail: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [trackers, total] = await Promise.all([
+      FeedbackTracker.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      FeedbackTracker.countDocuments(query),
+    ]);
+
+    // Get statistics
+    const statsArray = await FeedbackTracker.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const stats = {
+      total: total,
+      pending: 0,
+      reviewed: 0,
+      unreviewed: 0,
+      cancelled: 0,
+    };
+    statsArray.forEach((s) => {
+      stats[s._id] = s.count;
+    });
+
+    res.render("admin/feedback-manager", {
+      trackers,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      },
+      search,
+      status,
+      stats,
+      token: res.locals.token,
+    });
+  } catch (error) {
+    console.error("Error fetching feedback trackers:", error);
+    res.status(500).render("error", {
+      message: "Error fetching feedback trackers",
+      token: res.locals.token,
+    });
+  }
+});
+
+// Admin route for email template editor
+app.get("/admin/feedback/templates", verifyAdminToken, async (req, res) => {
+  try {
+    res.render("admin/email-templates", {
+      token: res.locals.token,
+    });
+  } catch (error) {
+    console.error("Error loading template editor:", error);
+    res.status(500).render("error", {
+      message: "Error loading template editor",
+      token: res.locals.token,
     });
   }
 });

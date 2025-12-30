@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Template Editor - Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #f5f7fa;
+      padding: 20px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { font-size: 28px; margin-bottom: 10px; }
+    .header p { opacity: 0.9; }
+    
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .tab {
+      padding: 12px 24px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .tab:hover { border-color: #667eea; }
+    .tab.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    
+    .editor-container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .form-group {
+      margin-bottom: 25px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #374151;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .form-group textarea {
+      width: 100%;
+      min-height: 400px;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      resize: vertical;
+    }
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-right: 10px;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    .btn-primary:hover { background: #5568d3; }
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover { background: #4b5563; }
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+    .btn-success:hover { background: #059669; }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .info-box {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .info-box p {
+      margin: 5px 0;
+      font-size: 14px;
+    }
+    
+    .preview {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-active {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge-file {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>✉️ Email Template Editor</h1>
+        <p>Customize feedback request emails for Day 3, 7, 14, and 30</p>
+      </div>
+      <a href="/admin/feedback?token=<%= token %>" class="btn btn-secondary" style="text-decoration: none;">
+        ← Back to Dashboard
+      </a>
+    </div>
+    
+    <div class="tabs">
+      <button class="tab active" data-day="3">Day 3 Email</button>
+      <button class="tab" data-day="7">Day 7 Email</button>
+      <button class="tab" data-day="14">Day 14 Email</button>
+      <button class="tab" data-day="30">Day 30 Email</button>
+    </div>
+    
+    <div class="editor-container">
+      <div class="info-box">
+        <p><strong>💡 Template Variables:</strong></p>
+        <p>• <code>{{customerName}}</code> - Will be replaced with the customer's name</p>
+        <p>• Keep HTML structure intact for responsive emails</p>
+        <p>• Changes are saved to database and override default templates</p>
+      </div>
+      
+      <div id="loading" class="loading">
+        <p>Loading template...</p>
+      </div>
+      
+      <div id="editor" style="display: none;">
+        <div class="form-group">
+          <label>
+            Template Status: 
+            <span id="templateStatus"></span>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label for="emailSubject">Email Subject Line</label>
+          <input type="text" id="emailSubject" placeholder="Enter email subject...">
+        </div>
+        
+        <div class="form-group">
+          <label for="emailHtml">HTML Content</label>
+          <textarea id="emailHtml" placeholder="Enter HTML email content..."></textarea>
+        </div>
+        
+        <div class="actions">
+          <button class="btn btn-success" id="saveBtn">💾 Save Changes</button>
+          <button class="btn btn-primary" id="previewBtn">👁️ Preview</button>
+          <button class="btn btn-danger" id="resetBtn">🔄 Reset to Default</button>
+        </div>
+        
+        <div id="preview" class="preview" style="display: none;">
+          <h3 style="margin-bottom: 15px;">Email Preview</h3>
+          <div id="previewContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const token = '<%= token %>';
+    let currentDay = 3;
+    let templates = {};
+    
+    // Load templates on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAllTemplates();
+      
+      // Setup tab clicks
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const day = parseInt(tab.dataset.day);
+          switchTab(day);
+        });
+      });
+      
+      // Setup button event listeners
+      document.getElementById('saveBtn').addEventListener('click', saveTemplate);
+      document.getElementById('previewBtn').addEventListener('click', previewEmail);
+      document.getElementById('resetBtn').addEventListener('click', resetTemplate);
+    });
+    
+    async function loadAllTemplates() {
+      try {
+        const response = await fetch(`/api/admin/email-templates?token=${token}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          data.templates.forEach(t => {
+            templates[t.day] = t;
+          });
+          loadTemplate(currentDay);
+        }
+      } catch (error) {
+        alert('Error loading templates: ' + error.message);
+      }
+    }
+    
+    function switchTab(day) {
+      currentDay = day;
+      
+      // Update active tab
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.toggle('active', parseInt(tab.dataset.day) === day);
+      });
+      
+      loadTemplate(day);
+    }
+    
+    function loadTemplate(day) {
+      const template = templates[day];
+      
+      if (!template) {
+        document.getElementById('loading').textContent = 'Template not found';
+        return;
+      }
+      
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('editor').style.display = 'block';
+      
+      // Update status badge
+      const statusEl = document.getElementById('templateStatus');
+      if (template.isFromFile || !template.isActive) {
+        statusEl.innerHTML = '<span class="status-badge badge-file">Using Default Template</span>';
+      } else {
+        statusEl.innerHTML = '<span class="status-badge badge-active">Using Custom Template</span>';
+      }
+      
+      // Load content
+      document.getElementById('emailSubject').value = template.subject || '';
+      document.getElementById('emailHtml').value = template.htmlContent || '';
+      
+      // Hide preview
+      document.getElementById('preview').style.display = 'none';
+    }
+    
+    async function saveTemplate() {
+      const subject = document.getElementById('emailSubject').value;
+      const htmlContent = document.getElementById('emailHtml').value;
+      
+      if (!subject || !htmlContent) {
+        alert('Please fill in both subject and HTML content');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/admin/email-templates/${currentDay}?token=${token}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject,
+            htmlContent,
+            isActive: true
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Template saved successfully!');
+          // Reload templates
+          await loadAllTemplates();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error saving template: ' + error.message);
+      }
+    }
+    
+    function previewEmail() {
+      const subject = document.getElementById('emailSubject').value;
+      const htmlContent = document.getElementById('emailHtml').value;
+      
+      // Replace placeholder with sample name
+      const previewHtml = htmlContent.replace(/{{customerName}}/g, 'John Doe');
+      
+      document.getElementById('preview').style.display = 'block';
+      document.getElementById('previewContent').innerHTML = `
+        <div style="background: #fff; padding: 20px; border-radius: 8px;">
+          <p style="margin-bottom: 10px;"><strong>Subject:</strong> ${subject.replace(/{{customerName}}/g, 'John Doe')}</p>
+          <hr style="margin: 20px 0; border: none; border-top: 2px solid #e5e7eb;">
+          ${previewHtml}
+        </div>
+      `;
+    }
+    
+    async function resetTemplate() {
+      if (!confirm('Reset this template to default? This will delete your custom version.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/admin/email-templates/${currentDay}/reset?token=${token}`, {
+          method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Template reset to default!');
+          // Reload templates
+          await loadAllTemplates();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error resetting template: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>

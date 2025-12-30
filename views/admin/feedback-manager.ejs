@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedback Tracker - Admin Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #f5f7fa;
+      padding: 20px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .header h1 { font-size: 28px; margin-bottom: 10px; }
+    .header p { opacity: 0.9; }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stat-card {
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-4px); }
+    .stat-label { color: #666; font-size: 14px; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 700; color: #333; }
+    .stat-card.pending .stat-value { color: #f59e0b; }
+    .stat-card.reviewed .stat-value { color: #10b981; }
+    .stat-card.unreviewed .stat-value { color: #ef4444; }
+    .stat-card.cancelled .stat-value { color: #6b7280; }
+    
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .controls input, .controls select {
+      padding: 10px 15px;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .controls input:focus, .controls select:focus {
+      border-color: #667eea;
+    }
+    .controls input[type="text"] { flex: 1; min-width: 250px; }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    .btn-primary:hover { background: #5568d3; }
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+    .btn-success:hover { background: #059669; }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover { background: #4b5563; }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    
+    .table-container {
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead {
+      background: #f9fafb;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    th {
+      padding: 15px;
+      text-align: left;
+      font-weight: 600;
+      color: #374151;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 15px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 14px;
+      color: #1f2937;
+    }
+    tr:hover { background: #f9fafb; }
+    
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-reviewed { background: #d1fae5; color: #065f46; }
+    .badge-unreviewed { background: #fee2e2; color: #991b1b; }
+    .badge-cancelled { background: #e5e7eb; color: #374151; }
+    .badge-sent { background: #dbeafe; color: #1e40af; }
+    .badge-pending-email { background: #fef3c7; color: #92400e; }
+    
+    .email-schedule {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .pagination a {
+      padding: 8px 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      text-decoration: none;
+      color: #374151;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .pagination a:hover { border-color: #667eea; color: #667eea; }
+    .pagination a.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+    
+    .no-data {
+      padding: 60px 20px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 16px;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #1f2937;
+    }
+    .modal-body { margin-bottom: 20px; }
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📧 Feedback Tracker Dashboard</h1>
+      <p>Manage automated review request emails for Study Key customers</p>
+      <div style="margin-top: 15px;">
+        <a href="/admin/feedback/templates?token=<%= token %>" class="btn btn-primary" style="text-decoration: none;">
+          ⚙️ Customize Email Templates
+        </a>
+      </div>
+    </div>
+    
+    <!-- Statistics -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Trackers</div>
+        <div class="stat-value"><%= stats.total || 0 %></div>
+      </div>
+      <div class="stat-card pending">
+        <div class="stat-label">Pending Reviews</div>
+        <div class="stat-value"><%= stats.pending || 0 %></div>
+      </div>
+      <div class="stat-card reviewed">
+        <div class="stat-label">Reviewed</div>
+        <div class="stat-value"><%= stats.reviewed || 0 %></div>
+      </div>
+      <div class="stat-card unreviewed">
+        <div class="stat-label">Unreviewed</div>
+        <div class="stat-value"><%= stats.unreviewed || 0 %></div>
+      </div>
+      <div class="stat-card cancelled">
+        <div class="stat-label">Cancelled</div>
+        <div class="stat-value"><%= stats.cancelled || 0 %></div>
+      </div>
+    </div>
+    
+    <!-- Controls -->
+    <div class="controls">
+      <input type="text" id="searchInput" placeholder="🔍 Search by Order ID, Name, or Email..." value="<%= search %>">
+      <select id="statusFilter">
+        <option value="">All Statuses</option>
+        <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+        <option value="reviewed" <%= status === 'reviewed' ? 'selected' : '' %>>Reviewed</option>
+        <option value="unreviewed" <%= status === 'unreviewed' ? 'selected' : '' %>>Unreviewed</option>
+        <option value="cancelled" <%= status === 'cancelled' ? 'selected' : '' %>>Cancelled</option>
+      </select>
+      <button class="btn btn-primary" id="applyFiltersBtn">Apply Filters</button>
+      <button class="btn btn-secondary" id="resetFiltersBtn">Reset</button>
+    </div>
+    
+    <!-- Table -->
+    <div class="table-container">
+      <% if (trackers && trackers.length > 0) { %>
+        <table>
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Customer</th>
+              <th>Email</th>
+              <th>Submission Date</th>
+              <th>Status</th>
+              <th>Email Schedule</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% trackers.forEach(tracker => { %>
+              <tr>
+                <td><strong><%= tracker.orderId %></strong></td>
+                <td><%= tracker.customerName %></td>
+                <td><%= tracker.customerEmail %></td>
+                <td><%= new Date(tracker.submissionDate).toLocaleDateString() %></td>
+                <td>
+                  <span class="badge badge-<%= tracker.status %>">
+                    <%= tracker.status %>
+                  </span>
+                  <% if (tracker.reviewedOnDay) { %>
+                    <br><small style="color: #6b7280;">Day <%= tracker.reviewedOnDay %></small>
+                  <% } %>
+                </td>
+                <td>
+                  <div class="email-schedule">
+                    <span class="badge <%= tracker.emailSchedule.day3.sent ? 'badge-sent' : 'badge-pending-email' %>" title="<%= tracker.emailSchedule.day3.sent ? 'Sent: ' + new Date(tracker.emailSchedule.day3.sentAt).toLocaleDateString() : 'Scheduled: ' + new Date(tracker.emailSchedule.day3.scheduledDate).toLocaleDateString() %>">
+                      D3 <%= tracker.emailSchedule.day3.sent ? '✓' : '⏳' %>
+                    </span>
+                    <span class="badge <%= tracker.emailSchedule.day7.sent ? 'badge-sent' : 'badge-pending-email' %>" title="<%= tracker.emailSchedule.day7.sent ? 'Sent: ' + new Date(tracker.emailSchedule.day7.sentAt).toLocaleDateString() : 'Scheduled: ' + new Date(tracker.emailSchedule.day7.scheduledDate).toLocaleDateString() %>">
+                      D7 <%= tracker.emailSchedule.day7.sent ? '✓' : '⏳' %>
+                    </span>
+                    <span class="badge <%= tracker.emailSchedule.day14.sent ? 'badge-sent' : 'badge-pending-email' %>" title="<%= tracker.emailSchedule.day14.sent ? 'Sent: ' + new Date(tracker.emailSchedule.day14.sentAt).toLocaleDateString() : 'Scheduled: ' + new Date(tracker.emailSchedule.day14.scheduledDate).toLocaleDateString() %>">
+                      D14 <%= tracker.emailSchedule.day14.sent ? '✓' : '⏳' %>
+                    </span>
+                    <span class="badge <%= tracker.emailSchedule.day30.sent ? 'badge-sent' : 'badge-pending-email' %>" title="<%= tracker.emailSchedule.day30.sent ? 'Sent: ' + new Date(tracker.emailSchedule.day30.sentAt).toLocaleDateString() : 'Scheduled: ' + new Date(tracker.emailSchedule.day30.scheduledDate).toLocaleDateString() %>">
+                      D30 <%= tracker.emailSchedule.day30.sent ? '✓' : '⏳' %>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="actions">
+                    <% if (tracker.status === 'pending' && tracker.isActive) { %>
+                      <button class="btn btn-success btn-sm mark-reviewed-btn" data-order-id="<%= tracker.orderId %>">
+                        ✓ Reviewed
+                      </button>
+                      <button class="btn btn-danger btn-sm cancel-emails-btn" data-order-id="<%= tracker.orderId %>">
+                        ✕ Cancel
+                      </button>
+                    <% } %>
+                    <% if (tracker.status === 'cancelled') { %>
+                      <button class="btn btn-primary btn-sm reactivate-btn" data-order-id="<%= tracker.orderId %>">
+                        ↻ Reactivate
+                      </button>
+                    <% } %>
+                    <% if (tracker.status === 'pending' && !tracker.isActive) { %>
+                      <button class="btn btn-secondary btn-sm mark-unreviewed-btn" data-order-id="<%= tracker.orderId %>">
+                        Mark Unreviewed
+                      </button>
+                    <% } %>
+                    <!-- Delete button - always visible -->
+                    <button class="btn btn-danger btn-sm delete-tracker-btn" data-order-id="<%= tracker.orderId %>" style="margin-left: 5px;">
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      <% } else { %>
+        <div class="no-data">
+          <p>📭 No feedback trackers found</p>
+          <p style="font-size: 14px; margin-top: 10px;">Trackers will appear here when customers claim tickets.</p>
+        </div>
+      <% } %>
+    </div>
+    
+    <!-- Pagination -->
+    <% if (pagination.pages > 1) { %>
+      <div class="pagination">
+        <% if (pagination.page > 1) { %>
+          <a href="?page=<%= pagination.page - 1 %>&search=<%= search %>&status=<%= status || '' %>&token=<%= token %>">← Previous</a>
+        <% } %>
+        
+        <% for (let i = 1; i <= pagination.pages; i++) { %>
+          <a href="?page=<%= i %>&search=<%= search %>&status=<%= status || '' %>&token=<%= token %>" class="<%= i === pagination.page ? 'active' : '' %>">
+            <%= i %>
+          </a>
+        <% } %>
+        
+        <% if (pagination.page < pagination.pages) { %>
+          <a href="?page=<%= pagination.page + 1 %>&search=<%= search %>&status=<%= status || '' %>&token=<%= token %>">Next →</a>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+  
+  <!-- Modal for Mark Reviewed -->
+  <div id="reviewedModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">Mark as Reviewed</div>
+      <div class="modal-body">
+        <p style="margin-bottom: 15px;">On which day did the customer leave their review?</p>
+        <select id="reviewDaySelect" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px;">
+          <option value="3">Day 3</option>
+          <option value="7">Day 7</option>
+          <option value="14">Day 14</option>
+          <option value="30">Day 30</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelModalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmReviewedBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const token = '<%= token %>';
+    let currentOrderId = '';
+    
+    // Setup event listeners on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      // Filter buttons
+      document.getElementById('applyFiltersBtn').addEventListener('click', applyFilters);
+      document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+      
+      // Modal buttons
+      document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+      document.getElementById('confirmReviewedBtn').addEventListener('click', confirmMarkReviewed);
+      
+      // Action buttons
+      document.querySelectorAll('.mark-reviewed-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          markReviewed(this.getAttribute('data-order-id'));
+        });
+      });
+      
+      document.querySelectorAll('.cancel-emails-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          cancelEmails(this.getAttribute('data-order-id'));
+        });
+      });
+      
+      document.querySelectorAll('.reactivate-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          reactivate(this.getAttribute('data-order-id'));
+        });
+      });
+      
+      document.querySelectorAll('.mark-unreviewed-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          markUnreviewed(this.getAttribute('data-order-id'));
+        });
+      });
+      
+      // Delete buttons
+      document.querySelectorAll('.delete-tracker-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          deleteTracker(this.getAttribute('data-order-id'));
+        });
+      });
+      
+      // Enter key to search
+      document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') applyFilters();
+      });
+    });
+    
+    function applyFilters() {
+      const search = document.getElementById('searchInput').value;
+      const status = document.getElementById('statusFilter').value;
+      window.location.href = `?search=${encodeURIComponent(search)}&status=${status}&token=${token}`;
+    }
+    
+    function resetFilters() {
+      window.location.href = `?token=${token}`;
+    }
+    
+    function markReviewed(orderId) {
+      currentOrderId = orderId;
+      document.getElementById('reviewedModal').classList.add('active');
+    }
+    
+    function closeModal() {
+      document.getElementById('reviewedModal').classList.remove('active');
+    }
+    
+    async function confirmMarkReviewed() {
+      const dayNumber = document.getElementById('reviewDaySelect').value;
+      
+      try {
+        const response = await fetch(`/api/admin/feedback-trackers/${currentOrderId}/mark-reviewed?token=${token}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dayNumber: parseInt(dayNumber) })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Tracker marked as reviewed! All future emails cancelled.');
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+      
+      closeModal();
+    }
+    
+    async function cancelEmails(orderId) {
+      if (!confirm('Cancel all future emails for this customer?')) return;
+      
+      const notes = prompt('Optional notes:');
+      
+      try {
+        const response = await fetch(`/api/admin/feedback-trackers/${orderId}/cancel?token=${token}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Emails cancelled successfully');
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    async function reactivate(orderId) {
+      if (!confirm('Reactivate this tracker and resume emails?')) return;
+      
+      try {
+        const response = await fetch(`/api/admin/feedback-trackers/${orderId}/reactivate?token=${token}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Tracker reactivated successfully');
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    async function markUnreviewed(orderId) {
+      if (!confirm('Mark this tracker as unreviewed?')) return;
+      
+      try {
+        const response = await fetch(`/api/admin/feedback-trackers/${orderId}/mark-unreviewed?token=${token}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Tracker marked as unreviewed');
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    async function deleteTracker(orderId) {
+      if (!confirm(`⚠️ DELETE TRACKER?
+
+Order ID: ${orderId}
+
+This will permanently delete:
+• Feedback tracker record
+• All email schedule data
+• Cannot be undone!
+
+Are you sure?`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/admin/feedback-trackers/${orderId}?token=${token}`, {
+          method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('✓ Feedback tracker deleted successfully!');
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error deleting tracker: ' + error.message);
+      }
+    }
+    
+    // Enter key to search
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') applyFilters();
+    });
+  </script>
+</body>
+</html>
