@@ -6,7 +6,8 @@ const SellingPartnerAPI = require("amazon-sp-api");
 const path = require("path");
 const { Parser } = require("json2csv");
 const ejs = require("ejs");
-const PDFDocument = require("pdfkit");
+const PDFDocument = require('pdfkit');
+
 
 const app = express();
 
@@ -69,6 +70,13 @@ const OrderSchema = new Schema({
   language: String,
   email: { type: String, required: true },
   orderId: { type: String, unique: true },
+  fullName: String,
+  country: String,
+  streetAddress: String,
+  city: String,
+  state: String,
+  zipCode: String,
+  phoneNumber: String,
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -243,12 +251,6 @@ app.post("/validate-order-id", async (req, res) => {
   }
 });
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 app.post("/submit-review", async (req, res) => {
   const formData = req.body;
@@ -257,7 +259,16 @@ app.post("/submit-review", async (req, res) => {
     try {
       await connectToDatabase();
 
-      const order = new Order(formData);
+      // Process form data to extract country and state names
+      const processedData = {
+        ...formData,
+        country: formData.country?.name || formData.country,
+        state: formData.state?.name || formData.state,
+        reviewStatus: "pending",
+        reviewSubmittedAt: new Date(),
+      };
+
+      const order = new Order(processedData);
 
       await order.save();
 
@@ -272,26 +283,32 @@ app.post("/submit-review", async (req, res) => {
         },
       };
 
-      // Update admin email to include media
+      // Admin notification email
       let adminMailOptions = {
         from: process.env.GMAIL_USER,
         to: process.env.GMAIL_USER,
         subject: "New Testimonial Claimed",
         html: DOMPurify.sanitize(`
           <h1>New Order Submission</h1>
-          ${Object.entries(formData)
-            .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
-            .join("")}
-          ${
-            mediaUrl
-              ? `<p><strong>Review ${
-                  req.file?.mimetype.startsWith("video/")
-                    ? "Video"
-                    : "Screenshot"
-                }:</strong> 
-                 <a href="${mediaUrl}">View Media</a></p>`
-              : ""
-          }
+          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h3>Order Information</h3>
+            <p><strong>Order ID:</strong> ${processedData.orderId || 'N/A'}</p>
+            <p><strong>Full Name:</strong> ${processedData.fullName || 'N/A'}</p>
+            <p><strong>Email:</strong> ${processedData.email || 'N/A'}</p>
+            <p><strong>Phone Number:</strong> ${processedData.phoneNumber || 'N/A'}</p>
+            
+            <h3>Shipping Address</h3>
+            <p><strong>Street Address:</strong> ${processedData.streetAddress || 'N/A'}</p>
+            <p><strong>City:</strong> ${processedData.city || 'N/A'}</p>
+            <p><strong>State:</strong> ${processedData.state || 'N/A'}</p>
+            <p><strong>ZIP Code:</strong> ${processedData.zipCode || 'N/A'}</p>
+            <p><strong>Country:</strong> ${processedData.country || 'N/A'}</p>
+            
+            <h3>Additional Information</h3>
+            <p><strong>Name (Original):</strong> ${processedData.name || 'N/A'}</p>
+            <p><strong>Language:</strong> ${processedData.language || 'N/A'}</p>
+            <p><strong>Submitted At:</strong> ${new Date(processedData.reviewSubmittedAt).toLocaleString()}</p>
+          </div>
         `),
       };
 
@@ -323,7 +340,6 @@ app.post("/submit-review", async (req, res) => {
       res.status(200).json({
         success: true,
         message: "Submission successful",
-        mediaUrl: mediaUrl,
       });
     } catch (err) {
       console.error("Upload error:", err);
@@ -334,11 +350,9 @@ app.post("/submit-review", async (req, res) => {
           errorCode: "DUPLICATE_CLAIM",
         });
       }
-      res.status(500).json({
-        success: false,
-        message: err.message.includes("file size")
-          ? "File size too large. Please upload a smaller file."
-          : "Error: " + err.message,
+      res.status(500).json({ 
+        success: false, 
+        message: "Error: " + err.message 
       });
     }
   } else {
@@ -348,10 +362,9 @@ app.post("/submit-review", async (req, res) => {
 
 // Error types for frontend handling
 const ErrorTypes = {
-  DUPLICATE_CLAIM: "DUPLICATE_CLAIM",
-  FILE_TOO_LARGE: "FILE_TOO_LARGE",
-  INVALID_DATA: "INVALID_DATA",
-  SERVER_ERROR: "SERVER_ERROR",
+  DUPLICATE_CLAIM: 'DUPLICATE_CLAIM',
+  INVALID_DATA: 'INVALID_DATA',
+  SERVER_ERROR: 'SERVER_ERROR'
 };
 
 // Error response helper
@@ -476,7 +489,6 @@ app.post("/claim-ticket", async (req, res) => {
       res.status(200).json({
         success: true,
         message: "Ticket claim submitted successfully",
-        // screenshotUrl: screenshotUrl,
       });
     } catch (err) {
       console.error("Upload error:", err);
@@ -493,16 +505,6 @@ app.post("/claim-ticket", async (req, res) => {
           );
       }
 
-      if (err.message && err.message.includes("file size")) {
-        return res
-          .status(400)
-          .json(
-            createErrorResponse(
-              ErrorTypes.FILE_TOO_LARGE,
-              "The file size is too large. Please upload a file smaller than 100MB."
-            )
-          );
-      }
 
       // Handle validation errors
       if (err.name === "ValidationError") {
@@ -527,14 +529,12 @@ app.post("/claim-ticket", async (req, res) => {
         );
     }
   } else {
-    return res
-      .status(400)
-      .json(
-        createErrorResponse(
-          ErrorTypes.INVALID_DATA,
-          "Please provide all required information and a screenshot."
-        )
-      );
+    return res.status(400).json(
+      createErrorResponse(
+        ErrorTypes.INVALID_DATA,
+        "Please provide all required information."
+      )
+    );
   }
 });
 
