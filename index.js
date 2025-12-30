@@ -22,7 +22,7 @@ const cors = require("cors");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
   "https://studykey-disneyworld-giveaway.vercel.app",
-  "https://https://studykey-third-server.vercel.app",
+  "https://studykey-third-server.vercel.app",
   // "http://localhost:5173",
 ];
 
