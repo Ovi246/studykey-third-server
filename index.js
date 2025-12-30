@@ -157,7 +157,7 @@ app.use(
           "https://cdn.jsdelivr.net",
         ],
         imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", "https://cdn.jsdelivr.net"], // Allow Bootstrap source maps
       },
     },
   })
