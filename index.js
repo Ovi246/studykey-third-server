@@ -76,7 +76,7 @@ const OrderSchema = new Schema({
   city: String,
   state: String,
   zipCode: String,
-  phoneNumber: String,
+ 
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -84,7 +84,7 @@ const TicketClaimSchema = new Schema({
   orderId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   email: { type: String, required: true },
-  phoneNumber: { type: String, required: true },
+ 
   asin: { type: String }, // Product ASIN
   productName: { type: String }, // Product name from Amazon
   productUrl: { type: String }, // Amazon product URL
@@ -413,7 +413,7 @@ app.post("/claim-ticket", async (req, res) => {
           orderId: formData.orderId,
           customerEmail: formData.email,
           customerName: formData.name,
-          phoneNumber: formData.phoneNumber,
+         
           asin: asin,
           productName: formData.productName,
           productUrl: productUrl,
