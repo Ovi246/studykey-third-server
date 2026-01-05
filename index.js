@@ -11,6 +11,9 @@ const PDFDocument = require('pdfkit');
 
 const app = express();
 
+// Trust Vercel proxy for correct IP detection and rate limiting
+app.set('trust proxy', 1);
+
 // Set up EJS as the view engine
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -19,6 +22,7 @@ app.use(express.json());
 require("dotenv").config();
 
 const cors = require("cors");
+const geoip = require("fast-geoip");
 const allowedOrigins = [
   "https://study-key-reward.vercel.app",
   "https://studykey-disneyworld-giveaway.vercel.app",
@@ -163,13 +167,17 @@ app.use(
   })
 );
 
-// Limit requests to 100 per hour per IP
+// Rate limiter configuration for Vercel
 const limiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for cron jobs
+  skip: (req) => req.path === '/api/cron/process-emails',
 });
 
-// Apply rate limiter to all requests
+// Apply rate limiter to all requests except cron
 app.use(limiter);
 
 app.use(
