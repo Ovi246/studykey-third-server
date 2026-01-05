@@ -1,4 +1,33 @@
 const { processPendingEmails } = require('../../services/emailScheduler');
+const mongoose = require('mongoose');
+
+// MongoDB connection for serverless
+let cachedConnection = null;
+
+async function connectToDatabase() {
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    console.log('✅ Using cached MongoDB connection');
+    return cachedConnection;
+  }
+
+  console.log('🔗 Connecting to MongoDB...');
+  const startConnect = Date.now();
+  
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000, // Fail fast if can't connect
+      socketTimeoutMS: 10000,
+      maxPoolSize: 1, // Minimal for serverless
+    });
+    
+    cachedConnection = conn;
+    console.log(`✅ MongoDB connected in ${Date.now() - startConnect}ms`);
+    return conn;
+  } catch (error) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    throw error;
+  }
+}
 
 /**
  * Vercel Cron Job Handler
@@ -41,9 +70,13 @@ module.exports = async (req, res) => {
   }
   
   console.log('✅ Authorization verified');
-  console.log('\n📧 Starting email processing...');
   
   try {
+    // Connect to MongoDB first!
+    await connectToDatabase();
+    
+    console.log('\n📧 Starting email processing...');
+    
     const results = await processPendingEmails();
     
     const duration = Date.now() - startTime;
