@@ -36,11 +36,12 @@ if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
   });
 }
 
-// Rate limiting configuration for Gmail free tier
+// Rate limiting configuration for Vercel's 10-second timeout
 const RATE_LIMIT = {
-  MAX_EMAILS_PER_RUN: 30, // Safe limit for Vercel 10s timeout
-  DELAY_BETWEEN_EMAILS: 2000, // 2 seconds delay
-  MAX_DAILY_EMAILS: 450 // Gmail allows 500/day, stay under limit
+  MAX_EMAILS_PER_RUN: 5, // Reduced for Vercel 10s timeout
+  DELAY_BETWEEN_EMAILS: 500, // 0.5 seconds delay (reduced from 2s)
+  MAX_DAILY_EMAILS: 450, // Gmail allows 500/day, stay under limit
+  VERCEL_TIMEOUT_MS: 8000 // Stop at 8s to leave time for cleanup
 };
 
 // Helper: Sleep function for rate limiting
@@ -144,51 +145,29 @@ const getEmailSubject = async (dayNumber, customerName) => {
  * Send a single feedback email
  */
 async function sendFeedbackEmail(tracker, dayNumber) {
-  console.log(`\n========================================`);
-  console.log(`📧 Attempting to send Day ${dayNumber} email`);
-  console.log(`Order ID: ${tracker.orderId}`);
-  console.log(`Customer: ${tracker.customerName} <${tracker.customerEmail}>`);
-  console.log(`Product: ${tracker.productName || 'N/A'}`);
-  console.log(`ASIN: ${tracker.asin || 'N/A'}`);
-  console.log(`Review URL: ${tracker.reviewUrl || 'N/A'}`);
-  console.log(`========================================`);
+  console.log(`\n📧 Sending Day ${dayNumber} email to ${tracker.orderId}`);
   
   try {
     // Check for Gmail configuration
-    console.log(`🔍 Checking Gmail configuration...`);
-    if (!process.env.GMAIL_USER) {
-      const error = 'GMAIL_USER not configured. Cannot send email.';
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+      const error = 'Gmail credentials not configured';
       console.error(`❌ ${error}`);
       tracker.emailSchedule[`day${dayNumber}`].error = error;
       await tracker.save();
       return { success: false, error: error };
     }
-    if (!process.env.GMAIL_PASS) {
-      const error = 'GMAIL_PASS not configured. Cannot send email.';
-      console.error(`❌ ${error}`);
-      tracker.emailSchedule[`day${dayNumber}`].error = error;
-      await tracker.save();
-      return { success: false, error: error };
-    }
-    console.log(`✅ GMAIL_USER found: ${process.env.GMAIL_USER}`);
-    console.log(`✅ GMAIL_PASS configured: ${process.env.GMAIL_PASS.substring(0, 4)}...`);
     
-    console.log(`\n📝 Loading email template...`);
-    const emailHtml = await loadEmailTemplate(
-      dayNumber, 
-      tracker.customerName,
-      tracker.productName || '',
-      tracker.reviewUrl || '',
-      tracker.productUrl || ''
-    );
-    console.log(`✅ Template loaded (${emailHtml.length} characters)`);
-    
-    const subject = await getEmailSubject(dayNumber, tracker.customerName);
-    console.log(`✅ Subject: "${subject}"`);
-    
-    console.log(`\n📤 Sending via Gmail SMTP...`);
-    console.log(`From: ${process.env.GMAIL_USER}`);
-    console.log(`To: ${tracker.customerEmail}`);
+    // Load template and subject (combined to save time)
+    const [emailHtml, subject] = await Promise.all([
+      loadEmailTemplate(
+        dayNumber, 
+        tracker.customerName,
+        tracker.productName || '',
+        tracker.reviewUrl || '',
+        tracker.productUrl || ''
+      ),
+      getEmailSubject(dayNumber, tracker.customerName)
+    ]);
     
     // Send email via Gmail
     const info = await transporter.sendMail({
@@ -198,39 +177,26 @@ async function sendFeedbackEmail(tracker, dayNumber) {
       html: emailHtml
     });
     
-    console.log(`\nGmail Response:`, JSON.stringify(info, null, 2));
-    
     // Check if email was accepted
     if (!info.accepted || info.accepted.length === 0) {
       const errorMessage = info.rejected ? `Email rejected: ${info.rejected.join(', ')}` : 'Email failed to send';
+      console.error(`❌ ${errorMessage}`);
       
-      console.error(`\n❌ Gmail rejected the email!`);
-      console.error(`Error: ${errorMessage}`);
-      
-      // Mark as FAILED (don't mark as sent)
       tracker.emailSchedule[`day${dayNumber}`].error = errorMessage;
       tracker.emailSchedule[`day${dayNumber}`].sent = false;
       await tracker.save();
-      console.log(`❌ Marked as FAILED in database (NOT sent)`);
-      console.log(`========================================\n`);
       
       return { success: false, error: errorMessage };
     }
     
-    console.log(`\n✅ SUCCESS! Email sent via Gmail`);
-    console.log(`Message ID: ${info.messageId}`);
-    console.log(`Accepted: ${info.accepted.join(', ')}`);
-    console.log(`Response: ${info.response}`);
+    console.log(`✅ Day ${dayNumber} sent to ${tracker.customerEmail}`);
     
     // Mark as sent
     tracker.emailSchedule[`day${dayNumber}`].sent = true;
     tracker.emailSchedule[`day${dayNumber}`].sentAt = new Date();
     tracker.emailSchedule[`day${dayNumber}`].error = null;
     await tracker.save();
-    console.log(`✅ Marked as sent in database`);
     
-    console.log(`\n✓ Day ${dayNumber} email completed successfully!`);
-    console.log(`========================================\n`);
     return { success: true, emailId: info.messageId };
     
   } catch (error) {
@@ -266,6 +232,7 @@ async function sendFeedbackEmail(tracker, dayNumber) {
 
 /**
  * Process all pending emails (called by cron job)
+ * Optimized for Vercel's 10-second timeout
  */
 async function processPendingEmails() {
   const startTime = Date.now();
@@ -274,6 +241,7 @@ async function processPendingEmails() {
     sent: 0,
     failed: 0,
     skipped: 0,
+    timedOut: false,
     errors: []
   };
   
@@ -282,6 +250,8 @@ async function processPendingEmails() {
     today.setHours(0, 0, 0, 0); // Start of today
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+    
+    console.log(`⏰ Time budget: ${RATE_LIMIT.VERCEL_TIMEOUT_MS}ms`);
     
     // Find all active trackers with emails due today
     const trackers = await FeedbackTracker.find({
@@ -309,8 +279,17 @@ async function processPendingEmails() {
     
     console.log(`Found ${trackers.length} trackers with pending emails for today`);
     
-    // Process each tracker
+    // Process each tracker with timeout protection
     for (const tracker of trackers) {
+      // Check if we're approaching timeout
+      const elapsed = Date.now() - startTime;
+      if (elapsed > RATE_LIMIT.VERCEL_TIMEOUT_MS) {
+        console.log(`⚠️  Approaching timeout limit (${elapsed}ms), stopping early`);
+        results.timedOut = true;
+        results.skipped = trackers.length - results.processed;
+        break;
+      }
+      
       // Check which day to send
       const daysToCheck = [30, 14, 7, 3]; // Priority: later days first
       
@@ -338,7 +317,7 @@ async function processPendingEmails() {
             });
           }
           
-          // Rate limiting delay
+          // Rate limiting delay (only if not the last email)
           if (results.processed < trackers.length) {
             await sleep(RATE_LIMIT.DELAY_BETWEEN_EMAILS);
           }
@@ -362,6 +341,9 @@ async function processPendingEmails() {
     console.log(`Sent: ${results.sent}`);
     console.log(`Failed: ${results.failed}`);
     console.log(`Skipped: ${results.skipped}`);
+    if (results.timedOut) {
+      console.log(`⚠️  Timed out: true (will process remaining emails on next run)`);
+    }
     if (results.errors.length > 0) {
       console.log(`\n❌ Errors:`);
       results.errors.forEach(err => {
