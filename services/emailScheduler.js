@@ -21,27 +21,22 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASS
-  }
+  },
+  pool: true, // Use connection pooling
+  maxConnections: 5,
+  rateDelta: 1000, // 1 email per second
+  rateLimit: 5 // Max 5 emails per second
 });
 
-// Verify transporter configuration on startup
-if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
-  transporter.verify(function(error, success) {
-    if (error) {
-      console.error('❌ Gmail SMTP verification failed:', error.message);
-      console.error('Please check your GMAIL_USER and GMAIL_PASS in .env file');
-    } else {
-      console.log('✅ Gmail SMTP is ready to send emails');
-    }
-  });
-}
+// Note: Verification removed to prevent blocking Vercel serverless cold starts
+// The transporter will fail gracefully if credentials are wrong
 
 // Rate limiting configuration for Vercel's 10-second timeout
 const RATE_LIMIT = {
-  MAX_EMAILS_PER_RUN: 5, // Reduced for Vercel 10s timeout
-  DELAY_BETWEEN_EMAILS: 500, // 0.5 seconds delay (reduced from 2s)
+  MAX_EMAILS_PER_RUN: 3, // Very conservative for Vercel cold starts
+  DELAY_BETWEEN_EMAILS: 300, // 0.3 seconds delay
   MAX_DAILY_EMAILS: 450, // Gmail allows 500/day, stay under limit
-  VERCEL_TIMEOUT_MS: 8000 // Stop at 8s to leave time for cleanup
+  VERCEL_TIMEOUT_MS: 7000 // Stop at 7s to leave more time for cleanup
 };
 
 // Helper: Sleep function for rate limiting
@@ -253,7 +248,7 @@ async function processPendingEmails() {
     
     console.log(`⏰ Time budget: ${RATE_LIMIT.VERCEL_TIMEOUT_MS}ms`);
     
-    // Find all active trackers with emails due today
+    // Find all active trackers with emails due today (optimized query)
     const trackers = await FeedbackTracker.find({
       isActive: true,
       status: 'pending',
@@ -275,7 +270,9 @@ async function processPendingEmails() {
           'emailSchedule.day30.scheduledDate': { $gte: today, $lt: tomorrow }
         }
       ]
-    }).limit(RATE_LIMIT.MAX_EMAILS_PER_RUN);
+    })
+    .select('orderId customerEmail customerName productName asin reviewUrl productUrl emailSchedule status')
+    .limit(RATE_LIMIT.MAX_EMAILS_PER_RUN);
     
     console.log(`Found ${trackers.length} trackers with pending emails for today`);
     
