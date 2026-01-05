@@ -592,6 +592,69 @@ const verifyAdminToken = (req, res, next) => {
   next();
 };
 
+// Health check endpoint for cron diagnostics
+app.get('/api/cron/health', verifyAdminToken, async (req, res) => {
+  try {
+    await connectToDatabase();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Check for pending emails
+    const pendingCount = await FeedbackTracker.countDocuments({
+      isActive: true,
+      status: 'pending',
+      $or: [
+        {
+          'emailSchedule.day3.sent': false,
+          'emailSchedule.day3.scheduledDate': { $gte: today, $lt: tomorrow }
+        },
+        {
+          'emailSchedule.day7.sent': false,
+          'emailSchedule.day7.scheduledDate': { $gte: today, $lt: tomorrow }
+        },
+        {
+          'emailSchedule.day14.sent': false,
+          'emailSchedule.day14.scheduledDate': { $gte: today, $lt: tomorrow }
+        },
+        {
+          'emailSchedule.day30.sent': false,
+          'emailSchedule.day30.scheduledDate': { $gte: today, $lt: tomorrow }
+        }
+      ]
+    });
+    
+    res.json({
+      success: true,
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      environment: {
+        nodeVersion: process.version,
+        cronSecretConfigured: !!process.env.CRON_SECRET,
+        gmailConfigured: !!process.env.GMAIL_USER && !!process.env.GMAIL_PASS,
+        mongodbConnected: true
+      },
+      pendingEmails: {
+        count: pendingCount,
+        todayRange: {
+          start: today.toISOString(),
+          end: tomorrow.toISOString()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      success: false,
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Delete ticket claim by Order ID (must be after verifyAdminToken)
 app.delete("/api/admin/ticket-claims/:orderId", verifyAdminToken, async (req, res) => {
   try {
