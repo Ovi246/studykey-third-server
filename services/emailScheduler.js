@@ -7,7 +7,8 @@ const path = require('path');
 // Initialize SendGrid
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  console.log('✅ SendGrid API initialized');
+  const keyPreview = process.env.SENDGRID_API_KEY.substring(0, 10) + '...' + process.env.SENDGRID_API_KEY.slice(-6);
+  console.log(`✅ SendGrid API initialized with key: ${keyPreview}`);
 } else {
   console.warn('⚠️  WARNING: SENDGRID_API_KEY not found in environment variables!');
   console.warn('Emails will fail to send. Please add SENDGRID_API_KEY to your .env file.');
@@ -24,6 +25,7 @@ const RATE_LIMIT = {
 // From email - configure in SendGrid dashboard (Sender Authentication)
 const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@studykey.com';
 const FROM_NAME = process.env.SENDGRID_FROM_NAME || 'Study Key';
+console.log(`📧 SendGrid sender config: "${FROM_NAME}" <${FROM_EMAIL}>`);
 
 // Helper: Sleep function for rate limiting
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -196,20 +198,37 @@ async function sendFeedbackEmail(tracker, dayNumber) {
     
   } catch (error) {
     console.error(`\n❌ FAILED to send Day ${dayNumber} email!`);
-    console.error(`Error: ${error.message}`);
-    
-    // Handle SendGrid specific errors
+    console.error(`Error message: ${error.message}`);
+    console.error(`Error code: ${error.code}`);
+
+    // Build detailed error info for response
+    let errorDetail = error.message || 'Unknown error';
+
     if (error.response) {
-      console.error(`SendGrid Error Code: ${error.code}`);
-      console.error(`SendGrid Error Body:`, JSON.stringify(error.response.body, null, 2));
+      const status = error.response.statusCode || error.response.status || 'unknown';
+      const body = error.response.body;
+      console.error(`SendGrid HTTP Status: ${status}`);
+      console.error(`SendGrid Response Body:`, JSON.stringify(body, null, 2));
+
+      // Extract SendGrid's specific error messages
+      if (body && body.errors && Array.isArray(body.errors)) {
+        const sgErrors = body.errors.map(e => `${e.message} (field: ${e.field}, help: ${e.help})`).join('; ');
+        errorDetail = `${error.message} [HTTP ${status}] - ${sgErrors}`;
+        console.error(`SendGrid Errors: ${sgErrors}`);
+      } else {
+        errorDetail = `${error.message} [HTTP ${status}] - Body: ${JSON.stringify(body)}`;
+      }
     }
-    
+
+    console.error(`Config used -> FROM: "${FROM_NAME}" <${FROM_EMAIL}> | TO: ${tracker.customerEmail}`);
+    console.error(`API Key starts with: ${process.env.SENDGRID_API_KEY ? process.env.SENDGRID_API_KEY.substring(0, 10) + '...' : 'NOT SET'}`);
+
     // Mark as failed in database
-    tracker.emailSchedule[`day${dayNumber}`].error = error.message || 'Unknown error';
+    tracker.emailSchedule[`day${dayNumber}`].error = errorDetail;
     tracker.emailSchedule[`day${dayNumber}`].sent = false;
     await tracker.save();
-    
-    return { success: false, error: error.message || 'Unknown error' };
+
+    return { success: false, error: errorDetail };
   }
 }
 
